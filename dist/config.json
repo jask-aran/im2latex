@@ -1,0 +1,4 @@
+{
+    "api_key": "AIzaSyAPEHhsRnA9sK59Zc8HMBA7yT92e39txyM",
+    "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image\u2019s visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present."
+}
