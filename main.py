@@ -97,11 +97,11 @@ class ScreenshotApp(QMainWindow):
         self.setFocusPolicy(Qt.StrongFocus)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.drawImage(event.rect(), self.image, event.rect())  # Only draw the updated region
-        painter.setBrush(QColor(255, 255, 255, 50))  # Lighter opacity for less blending overhead
-        painter.setPen(Qt.NoPen)
-        painter.drawRect(event.rect())  # Clip to updated region
+            painter = QPainter(self)
+            painter.drawImage(event.rect(), self.image, event.rect())
+            painter.setBrush(QColor(0, 0, 0, 50))  # Darken with semi-transparent black
+            painter.setPen(Qt.NoPen)
+            painter.drawRect(event.rect())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

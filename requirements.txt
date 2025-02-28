@@ -1,0 +1,4 @@
+PyQt5==5.15.9
+mss==9.0.1
+Pillow==10.2.0
+google-generativeai==0.5.4
