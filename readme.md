@@ -17,7 +17,7 @@ A tool to convert mathematical images to LaTeX code using Google Generative AI.
 ## Building the App
 1. Ensure the virtual environment is activated.
 2. Run the following command to build the executable:
-   - pyinstaller Im2Latex.spec
+   - pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --icon=assets/scissor.png --name=Im2Latex main.py
 3. Find the executable in the `dist` folder.
 
 ## Usage
