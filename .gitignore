@@ -1,0 +1,28 @@
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Build and distribution directories
+build/
+dist/
+
+# Generated files
+screenshot.png
+
+# Configuration file with API key
+config.json
+
+# IDE or editor specific files (if any)
+*.swp
+*.swo
+*.sublime-workspace
+*.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# dev files
