@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QRect, QAbstractNativeEventFilter
 from PyQt5.QtMultimedia import QSound
-from PyQt5.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QImage
+from PyQt5.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QImage, QPen
 import mss
 from PIL import Image
 from google import genai
@@ -32,6 +32,9 @@ DEFAULT_CONFIG = {
     "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
 }
 
+os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
+
+
 def resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative_path)
@@ -42,45 +45,133 @@ def load_config(default_config=DEFAULT_CONFIG):
     config_path = Path("config.json")
     try:
         config = json.loads(config_path.read_text())
-        if not isinstance(config, dict) or not config.get("api_key", "").strip() or config["api_key"] == "YOUR_API_KEY_HERE":
+        if (
+            not isinstance(config, dict)
+            or not config.get("api_key", "").strip()
+            or config["api_key"] == "YOUR_API_KEY_HERE"
+        ):
             raise ValueError("Invalid or missing API key")
         return config
     except (FileNotFoundError, json.JSONDecodeError) as e:
         config_path.write_text(json.dumps(default_config, indent=4))
-        QMessageBox.critical(None, "Im2Latex Config Error", f"{e}. New default config created. Edit it with a valid API key.")
+        show_config_error(
+            f"A new default config has been created. Please edit it with a valid API key."
+        )
         sys.exit(1)
     except ValueError as e:
-        QMessageBox.critical(None, "Im2Latex Config Error", f"{e}. Please fix the API key in config.json.")
+        show_config_error(f"{e}. Please fix the API key in config.json.")
         sys.exit(1)
 
-class GlobalHotkeyFilter(QAbstractNativeEventFilter):
-    def __init__(self, callback, hotkey_id=1, modifiers=MOD_WIN | MOD_SHIFT, vk=0x5A):
-        super().__init__()
-        self.callback = callback
-        self.hotkey_id = hotkey_id
+
+def show_config_error(message):
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Critical)
+    msg_box.setWindowTitle("Im2Latex Config Error")
+    msg_box.setText(message)
+
+    # Add "Open Folder" button to message box
+    open_folder_button = msg_box.addButton(
+        "Open Installation Folder", QMessageBox.ActionRole
+    )
+    msg_box.addButton(QMessageBox.Ok)
+
+    msg_box.exec_()
+
+    # If user clicks "Open Folder", open the current working directory
+    if msg_box.clickedButton() == open_folder_button:
+        os.startfile(os.getcwd())  # Opens the folder in File Explorer
+
+
+class HotkeyManager:
+    def __init__(self):
         self.user32 = ctypes.windll.user32
-        if not self.user32.RegisterHotKey(None, self.hotkey_id, modifiers, vk):
-            print("Failed to register hotkey. It might already be in use.")
+        self.hotkeys = {}  # {hotkey_id: (modifiers, vk, callback)}
+        self.next_id = 1
+
+    def register_hotkey(self, modifiers, vk, callback):
+        """Register a new hotkey with the given modifiers, virtual key code, and callback."""
+        hotkey_id = self.next_id
+        if self.user32.RegisterHotKey(None, hotkey_id, modifiers, vk):
+            self.hotkeys[hotkey_id] = (modifiers, vk, callback)
+            self.next_id += 1
+            return hotkey_id
         else:
-            print("Hotkey registered.")
+            # Check if hotkey is already registered within our app
+            for existing_id, (ex_mod, ex_vk, _) in self.hotkeys.items():
+                if ex_mod == modifiers and ex_vk == vk:
+                    raise ValueError(
+                        f"Hotkey Win+Shift+Z already registered in application"
+                    )
+            raise ValueError(
+                f"Failed to register hotkey Win+Shift+Z. It might be in use by another application."
+            )
+
+    def unregister_hotkey(self, hotkey_id):
+        """Unregister a specific hotkey by its ID."""
+        if hotkey_id in self.hotkeys:
+            if self.user32.UnregisterHotKey(None, hotkey_id):
+                del self.hotkeys[hotkey_id]
+                return True
+        return False
+
+    def update_hotkeys(self, hotkey_configs):
+        """Update all hotkeys based on a new configuration dictionary."""
+        # Unregister all existing hotkeys
+        for hotkey_id in list(self.hotkeys.keys()):
+            self.unregister_hotkey(hotkey_id)
+
+        # Register new hotkeys
+        for config in hotkey_configs:
+            self.register_hotkey(config["modifiers"], config["vk"], config["callback"])
+
+    def process_message(self, msg):
+        """Process Windows messages and dispatch callbacks."""
+        if msg.message == WM_HOTKEY and msg.wParam in self.hotkeys:
+            _, _, callback = self.hotkeys[msg.wParam]
+            callback()
+            return True
+        return False
+
+    def cleanup(self):
+        """Unregister all hotkeys on cleanup."""
+        for hotkey_id in list(self.hotkeys.keys()):
+            self.unregister_hotkey(hotkey_id)
+
+
+class HotkeyEventFilter(QAbstractNativeEventFilter):
+    def __init__(self, manager):
+        super().__init__()
+        self.manager = manager
 
     def nativeEventFilter(self, eventType, message):
         if eventType == b"windows_generic_MSG":
-            msg = ctypes.cast(ctypes.c_void_p(int(message)), ctypes.POINTER(wintypes.MSG)).contents
-            if msg.message == WM_HOTKEY and msg.wParam == self.hotkey_id:
-                self.callback()  
+            msg = ctypes.cast(
+                ctypes.c_void_p(int(message)), ctypes.POINTER(wintypes.MSG)
+            ).contents
+            if self.manager.process_message(msg):
                 return True, 0
         return False, 0
-    
-    def unregister(self):
-        self.user32.UnregisterHotKey(None, self.hotkey_id)
+
+
+class CustomRubberBand(QRubberBand):
+    def __init__(self, shape, parent=None):
+        super().__init__(shape, parent)
+        self.border_color = QColor(255, 255, 255)
+        self.fill_color = QColor(255, 255, 255, 50)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setPen(QPen(self.border_color, 2))
+        painter.setBrush(self.fill_color)
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+
 
 class ScreenshotApp(QMainWindow):
     def __init__(self, callback, monitor_geometry, virtual_rect):
         super().__init__()
         self.callback = callback
         self.monitor_geometry = monitor_geometry
-        self.screenshot = mss.mss().grab(self.monitor_geometry)  
+        self.screenshot = mss.mss().grab(self.monitor_geometry)
         self.image = QImage(
             self.screenshot.rgb,
             self.screenshot.width,
@@ -93,15 +184,16 @@ class ScreenshotApp(QMainWindow):
         self.setGeometry(virtual_rect)
         self.setWindowOpacity(1.0)
         self.origin = None
-        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        self.rubberBand = CustomRubberBand(QRubberBand.Rectangle, self)
+
         self.setFocusPolicy(Qt.StrongFocus)
 
     def paintEvent(self, event):
-            painter = QPainter(self)
-            painter.drawImage(event.rect(), self.image, event.rect())
-            painter.setBrush(QColor(0, 0, 0, 50))  # Darken with semi-transparent black
-            painter.setPen(Qt.NoPen)
-            painter.drawRect(event.rect())
+        painter = QPainter(self)
+        painter.drawImage(event.rect(), self.image, event.rect())
+        painter.setBrush(QColor(0, 0, 0, 80))  # Darken with semi-transparent black
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(event.rect())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -130,6 +222,7 @@ class ScreenshotApp(QMainWindow):
             print("Escape key pressed, closing screenshot window")
             self.close()
 
+
 class Im2LatexApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
@@ -150,14 +243,27 @@ class Im2LatexApp:
             "height": self.virtual_rect.height(),
         }
 
-        self.tray_icon = QSystemTrayIcon(QIcon(resource_path("assets/scissor.png")), self.app)
+        self.tray_icon = QSystemTrayIcon(
+            QIcon(resource_path("assets/scissor.png")), self.app
+        )
         self.tray_icon.setToolTip("Im2Latex")
         self.setup_tray_menu()
         self.tray_icon.show()
 
-        self.hotkey_filter = GlobalHotkeyFilter(self.trigger_screenshot)  # No parameters passed
+        # Initialize hotkey manager and register default hotkey
+        self.hotkey_manager = HotkeyManager()
+        self.hotkey_filter = HotkeyEventFilter(self.hotkey_manager)
         self.app.installNativeEventFilter(self.hotkey_filter)
-        self.app.aboutToQuit.connect(self.hotkey_filter.unregister)
+        self.app.aboutToQuit.connect(self.hotkey_manager.cleanup)
+
+        # Register initial hotkey (Win+Shift+Z)
+        try:
+            self.hotkey_manager.register_hotkey(
+                MOD_WIN | MOD_SHIFT, 0x5A, self.trigger_screenshot  # VK_Z
+            )
+            print("Hotkey Win+Shift+Z registered successfully")
+        except ValueError as e:
+            print(f"Hotkey registration failed: {e}")
 
     def setup_tray_menu(self):
         menu = QMenu()
@@ -166,7 +272,9 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
 
     def trigger_screenshot(self):
-        self.screenshot_window = ScreenshotApp(self.process_screenshot, self.monitor_geometry, self.virtual_rect)
+        self.screenshot_window = ScreenshotApp(
+            self.process_screenshot, self.monitor_geometry, self.virtual_rect
+        )
         self.screenshot_window.show()
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
@@ -183,8 +291,10 @@ class Im2LatexApp:
         try:
             print("Sending to API")
             self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
-            response = self.client.models.generate_content(model="gemini-2.0-flash", contents=[self.prompt_text, pil_image])
-            
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash", contents=[self.prompt_text, pil_image]
+            )
+
             raw_response = response.text.strip()
             if raw_response.startswith("```latex") or raw_response.startswith("```"):
                 raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
@@ -202,9 +312,11 @@ class Im2LatexApp:
     def run(self):
         sys.exit(self.app.exec_())
 
+
 def main():
     app = Im2LatexApp()
     app.run()
+
 
 if __name__ == "__main__":
     main()
