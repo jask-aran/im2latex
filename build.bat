@@ -1,6 +1,6 @@
 @echo off
 
-REM Define the path to the virtual environment
+REM Define paths
 set VENV_DIR=.venv
 set REQUIREMENTS_FILE=requirements.txt
 
@@ -11,7 +11,7 @@ if not exist %VENV_DIR%\ (
     echo Virtual environment not found. Creating one...
     python -m venv %VENV_DIR%
     if errorlevel 1 (
-        echo Failed to create virtual environment. Please ensure Python is installed and accessible.
+        echo Failed to create virtual environment. Ensure Python is installed.
         pause
         exit /b 1
     )
@@ -26,27 +26,26 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if requirements.txt exists and install dependencies
+REM Install dependencies
 if exist %REQUIREMENTS_FILE% (
-    echo Checking for required packages...
+    echo Installing dependencies...
     pip install -r %REQUIREMENTS_FILE%
     if errorlevel 1 (
-        echo Failed to install dependencies. Check requirements.txt and internet connection.
+        echo Failed to install dependencies. Check requirements.txt.
         pause
         exit /b 1
     )
-    echo Dependencies installed successfully.
 ) else (
-    echo Warning: requirements.txt not found. Skipping dependency installation. Ensure dependencies are installed manually.
+    echo Warning: requirements.txt not found. Ensure dependencies are installed manually.
 )
 
 echo Building the executable...
 pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --icon=assets/scissor.png --name=Im2Latex main.py
 if errorlevel 1 (
-    echo Failed to build the executable. Check PyInstaller and dependencies.
+    echo Failed to build the executable.
     pause
     exit /b 1
 )
 
-echo Build complete!
+echo Build complete! The executable can be found in the 'dist' folder.
 pause

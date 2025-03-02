@@ -32,6 +32,8 @@ DEFAULT_CONFIG = {
     "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
 }
 
+os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
+
 def resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative_path)
@@ -47,11 +49,28 @@ def load_config(default_config=DEFAULT_CONFIG):
         return config
     except (FileNotFoundError, json.JSONDecodeError) as e:
         config_path.write_text(json.dumps(default_config, indent=4))
-        QMessageBox.critical(None, "Im2Latex Config Error", f"{e}. New default config created. Edit it with a valid API key.")
+        show_config_error(f"A new default config has been created. Please edit it with a valid API key.")
         sys.exit(1)
     except ValueError as e:
-        QMessageBox.critical(None, "Im2Latex Config Error", f"{e}. Please fix the API key in config.json.")
+        show_config_error(f"{e}. Please fix the API key in config.json.")
         sys.exit(1)
+
+def show_config_error(message):
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Critical)
+    msg_box.setWindowTitle("Im2Latex Config Error")
+    msg_box.setText(message)
+
+    # Add "Open Folder" button to message box
+    open_folder_button = msg_box.addButton("Open Installation Folder", QMessageBox.ActionRole)
+    msg_box.addButton(QMessageBox.Ok)
+
+    msg_box.exec_()
+
+    # If user clicks "Open Folder", open the current working directory
+    if msg_box.clickedButton() == open_folder_button:
+        os.startfile(os.getcwd())  # Opens the folder in File Explorer
+
 
 class GlobalHotkeyFilter(QAbstractNativeEventFilter):
     def __init__(self, callback, hotkey_id=1, modifiers=MOD_WIN | MOD_SHIFT, vk=0x5A):
