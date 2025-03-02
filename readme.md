@@ -2,6 +2,9 @@
 
 A tool to convert mathematical images to LaTeX code using Google Generative AI.
 
+<img src=".github/demo.gif" width="600">
+
+
 ## Setup & Building
 
 ### Option 1: Using the Build Script (Recommended for Windows)
