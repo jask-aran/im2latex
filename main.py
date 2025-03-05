@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
+
 def resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative_path)
@@ -44,16 +45,23 @@ def load_config(default_config=DEFAULT_CONFIG):
     config_path = Path("config.json")
     try:
         config = json.loads(config_path.read_text())
-        if not isinstance(config, dict) or not config.get("api_key", "").strip() or config["api_key"] == "YOUR_API_KEY_HERE":
+        if (
+            not isinstance(config, dict)
+            or not config.get("api_key", "").strip()
+            or config["api_key"] == "YOUR_API_KEY_HERE"
+        ):
             raise ValueError("Invalid or missing API key")
         return config
     except (FileNotFoundError, json.JSONDecodeError) as e:
         config_path.write_text(json.dumps(default_config, indent=4))
-        show_config_error(f"A new default config has been created. Please edit it with a valid API key.")
+        show_config_error(
+            f"A new default config has been created. Please edit it with a valid API key."
+        )
         sys.exit(1)
     except ValueError as e:
         show_config_error(f"{e}. Please fix the API key in config.json.")
         sys.exit(1)
+
 
 def show_config_error(message):
     msg_box = QMessageBox()
@@ -62,7 +70,9 @@ def show_config_error(message):
     msg_box.setText(message)
 
     # Add "Open Folder" button to message box
-    open_folder_button = msg_box.addButton("Open Installation Folder", QMessageBox.ActionRole)
+    open_folder_button = msg_box.addButton(
+        "Open Installation Folder", QMessageBox.ActionRole
+    )
     msg_box.addButton(QMessageBox.Ok)
 
     msg_box.exec_()
@@ -85,21 +95,24 @@ class GlobalHotkeyFilter(QAbstractNativeEventFilter):
 
     def nativeEventFilter(self, eventType, message):
         if eventType == b"windows_generic_MSG":
-            msg = ctypes.cast(ctypes.c_void_p(int(message)), ctypes.POINTER(wintypes.MSG)).contents
+            msg = ctypes.cast(
+                ctypes.c_void_p(int(message)), ctypes.POINTER(wintypes.MSG)
+            ).contents
             if msg.message == WM_HOTKEY and msg.wParam == self.hotkey_id:
-                self.callback()  
+                self.callback()
                 return True, 0
         return False, 0
-    
+
     def unregister(self):
         self.user32.UnregisterHotKey(None, self.hotkey_id)
+
 
 class ScreenshotApp(QMainWindow):
     def __init__(self, callback, monitor_geometry, virtual_rect):
         super().__init__()
         self.callback = callback
         self.monitor_geometry = monitor_geometry
-        self.screenshot = mss.mss().grab(self.monitor_geometry)  
+        self.screenshot = mss.mss().grab(self.monitor_geometry)
         self.image = QImage(
             self.screenshot.rgb,
             self.screenshot.width,
@@ -116,11 +129,11 @@ class ScreenshotApp(QMainWindow):
         self.setFocusPolicy(Qt.StrongFocus)
 
     def paintEvent(self, event):
-            painter = QPainter(self)
-            painter.drawImage(event.rect(), self.image, event.rect())
-            painter.setBrush(QColor(0, 0, 0, 50))  # Darken with semi-transparent black
-            painter.setPen(Qt.NoPen)
-            painter.drawRect(event.rect())
+        painter = QPainter(self)
+        painter.drawImage(event.rect(), self.image, event.rect())
+        painter.setBrush(QColor(0, 0, 0, 50))  # Darken with semi-transparent black
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(event.rect())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -149,6 +162,7 @@ class ScreenshotApp(QMainWindow):
             print("Escape key pressed, closing screenshot window")
             self.close()
 
+
 class Im2LatexApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
@@ -169,12 +183,16 @@ class Im2LatexApp:
             "height": self.virtual_rect.height(),
         }
 
-        self.tray_icon = QSystemTrayIcon(QIcon(resource_path("assets/scissor.png")), self.app)
+        self.tray_icon = QSystemTrayIcon(
+            QIcon(resource_path("assets/scissor.png")), self.app
+        )
         self.tray_icon.setToolTip("Im2Latex")
         self.setup_tray_menu()
         self.tray_icon.show()
 
-        self.hotkey_filter = GlobalHotkeyFilter(self.trigger_screenshot)  # No parameters passed
+        self.hotkey_filter = GlobalHotkeyFilter(
+            self.trigger_screenshot
+        )  # No parameters passed
         self.app.installNativeEventFilter(self.hotkey_filter)
         self.app.aboutToQuit.connect(self.hotkey_filter.unregister)
 
@@ -185,7 +203,9 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
 
     def trigger_screenshot(self):
-        self.screenshot_window = ScreenshotApp(self.process_screenshot, self.monitor_geometry, self.virtual_rect)
+        self.screenshot_window = ScreenshotApp(
+            self.process_screenshot, self.monitor_geometry, self.virtual_rect
+        )
         self.screenshot_window.show()
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
@@ -202,8 +222,10 @@ class Im2LatexApp:
         try:
             print("Sending to API")
             self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
-            response = self.client.models.generate_content(model="gemini-2.0-flash", contents=[self.prompt_text, pil_image])
-            
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash", contents=[self.prompt_text, pil_image]
+            )
+
             raw_response = response.text.strip()
             if raw_response.startswith("```latex") or raw_response.startswith("```"):
                 raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
@@ -221,9 +243,11 @@ class Im2LatexApp:
     def run(self):
         sys.exit(self.app.exec_())
 
+
 def main():
     app = Im2LatexApp()
     app.run()
+
 
 if __name__ == "__main__":
     main()

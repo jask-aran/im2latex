@@ -3,6 +3,8 @@
 REM Define paths
 set VENV_DIR=.venv
 set REQUIREMENTS_FILE=requirements.txt
+set MAIN_SCRIPT=test.py
+set SHORTCUTS_SCRIPT=shortcuts.py
 
 echo Checking for virtual environment...
 
@@ -39,8 +41,20 @@ if exist %REQUIREMENTS_FILE% (
     echo Warning: requirements.txt not found. Ensure dependencies are installed manually.
 )
 
+REM Check for required scripts
+if not exist %MAIN_SCRIPT% (
+    echo Error: %MAIN_SCRIPT% not found.
+    pause
+    exit /b 1
+)
+if not exist %SHORTCUTS_SCRIPT% (
+    echo Error: %SHORTCUTS_SCRIPT% not found.
+    pause
+    exit /b 1
+)
+
 echo Building the executable...
-pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --icon=assets/scissor.png --name=Im2Latex main.py
+pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --icon=assets/scissor.png --name=Im2Latex %MAIN_SCRIPT%
 if errorlevel 1 (
     echo Failed to build the executable.
     pause
