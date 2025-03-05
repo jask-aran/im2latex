@@ -1,5 +1,6 @@
 import sys
 import os
+import platform
 import ctypes
 import ctypes.wintypes as wintypes
 import json
@@ -20,16 +21,15 @@ from PIL import Image
 from google import genai
 from pathlib import Path
 
-# Constants for Windows hotkey registration
-MOD_WIN = 0x0008
-MOD_SHIFT = 0x0004
+# Windows constants
 WM_HOTKEY = 0x0312
 
-# Config file settings
+# Config settings
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "api_key": "YOUR_API_KEY_HERE",
     "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
+    "shortcuts": [{"shortcut_str": "win+shift+z", "action": "trigger_screenshot"}],
 }
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
@@ -42,7 +42,7 @@ def resource_path(relative_path):
 
 
 def load_config(default_config=DEFAULT_CONFIG):
-    config_path = Path("config.json")
+    config_path = Path(CONFIG_FILE)
     try:
         config = json.loads(config_path.read_text())
         if (
@@ -68,77 +68,139 @@ def show_config_error(message):
     msg_box.setIcon(QMessageBox.Critical)
     msg_box.setWindowTitle("Im2Latex Config Error")
     msg_box.setText(message)
-
-    # Add "Open Folder" button to message box
     open_folder_button = msg_box.addButton(
         "Open Installation Folder", QMessageBox.ActionRole
     )
     msg_box.addButton(QMessageBox.Ok)
-
     msg_box.exec_()
-
-    # If user clicks "Open Folder", open the current working directory
     if msg_box.clickedButton() == open_folder_button:
-        os.startfile(os.getcwd())  # Opens the folder in File Explorer
+        os.startfile(os.getcwd())
 
 
-class HotkeyManager:
-    def __init__(self):
-        self.user32 = ctypes.windll.user32
-        self.hotkeys = {}  # {hotkey_id: (modifiers, vk, callback)}
-        self.next_id = 1
+class ShortcutBackend:
+    def register_shortcut(self, modifiers, key, shortcut_id, callback):
+        raise NotImplementedError
 
-    def register_hotkey(self, modifiers, vk, callback):
-        """Register a new hotkey with the given modifiers, virtual key code, and callback."""
-        hotkey_id = self.next_id
-        if self.user32.RegisterHotKey(None, hotkey_id, modifiers, vk):
-            self.hotkeys[hotkey_id] = (modifiers, vk, callback)
-            self.next_id += 1
-            return hotkey_id
-        else:
-            # Check if hotkey is already registered within our app
-            for existing_id, (ex_mod, ex_vk, _) in self.hotkeys.items():
-                if ex_mod == modifiers and ex_vk == vk:
-                    raise ValueError(
-                        f"Hotkey Win+Shift+Z already registered in application"
-                    )
-            raise ValueError(
-                f"Failed to register hotkey Win+Shift+Z. It might be in use by another application."
-            )
-
-    def unregister_hotkey(self, hotkey_id):
-        """Unregister a specific hotkey by its ID."""
-        if hotkey_id in self.hotkeys:
-            if self.user32.UnregisterHotKey(None, hotkey_id):
-                del self.hotkeys[hotkey_id]
-                return True
-        return False
-
-    def update_hotkeys(self, hotkey_configs):
-        """Update all hotkeys based on a new configuration dictionary."""
-        # Unregister all existing hotkeys
-        for hotkey_id in list(self.hotkeys.keys()):
-            self.unregister_hotkey(hotkey_id)
-
-        # Register new hotkeys
-        for config in hotkey_configs:
-            self.register_hotkey(config["modifiers"], config["vk"], config["callback"])
+    def unregister_shortcut(self, shortcut_id):
+        raise NotImplementedError
 
     def process_message(self, msg):
-        """Process Windows messages and dispatch callbacks."""
-        if msg.message == WM_HOTKEY and msg.wParam in self.hotkeys:
-            _, _, callback = self.hotkeys[msg.wParam]
-            callback()
+        raise NotImplementedError
+
+
+class WindowsShortcutBackend(ShortcutBackend):
+    MODIFIER_MAP = {"ctrl": 0x0002, "alt": 0x0001, "shift": 0x0004, "win": 0x0008}
+    KEY_MAP = {
+        "a": 0x41,
+        "b": 0x42,
+        "c": 0x43,
+        "d": 0x44,
+        "e": 0x45,
+        "f": 0x46,
+        "g": 0x47,
+        "h": 0x48,
+        "i": 0x49,
+        "j": 0x4A,
+        "k": 0x4B,
+        "l": 0x4C,
+        "m": 0x4D,
+        "n": 0x4E,
+        "o": 0x4F,
+        "p": 0x50,
+        "q": 0x51,
+        "r": 0x52,
+        "s": 0x53,
+        "t": 0x54,
+        "u": 0x55,
+        "v": 0x56,
+        "w": 0x57,
+        "x": 0x58,
+        "y": 0x59,
+        "z": 0x5A,
+        "0": 0x30,
+        "1": 0x31,
+        "2": 0x32,
+        "3": 0x33,
+        "4": 0x34,
+        "5": 0x35,
+        "6": 0x36,
+        "7": 0x37,
+        "8": 0x38,
+        "9": 0x39,
+    }
+
+    def __init__(self):
+        self.user32 = ctypes.windll.user32
+        self.shortcuts = {}  # {shortcut_id: callback}
+
+    def register_shortcut(self, modifiers, key, shortcut_id, callback):
+        mod_value = sum(self.MODIFIER_MAP.get(m, 0) for m in modifiers)
+        key_value = self.KEY_MAP.get(key.lower(), 0)
+        if not key_value:
+            raise ValueError(f"Unsupported key: {key}")
+        if not all(m in self.MODIFIER_MAP for m in modifiers):
+            raise ValueError(
+                f"Unsupported modifiers: {set(modifiers) - set(self.MODIFIER_MAP)}"
+            )
+        if self.user32.RegisterHotKey(None, shortcut_id, mod_value, key_value):
+            self.shortcuts[shortcut_id] = callback
             return True
         return False
 
+    def unregister_shortcut(self, shortcut_id):
+        if shortcut_id in self.shortcuts and self.user32.UnregisterHotKey(
+            None, shortcut_id
+        ):
+            del self.shortcuts[shortcut_id]
+            return True
+        return False
+
+    def process_message(self, msg):
+        if msg.message == WM_HOTKEY and msg.wParam in self.shortcuts:
+            self.shortcuts[msg.wParam]()
+            return True
+        return False
+
+
+def get_shortcut_backend():
+    if platform.system() == "Windows":
+        return WindowsShortcutBackend()
+    raise NotImplementedError(f"Unsupported platform: {platform.system()}")
+
+
+class ShortcutManager:
+    def __init__(self):
+        self.backend = get_shortcut_backend()
+        self.next_id = 1
+
+    def parse_shortcut(self, shortcut_str):
+        parts = shortcut_str.lower().split("+")
+        if not parts:
+            raise ValueError(f"Invalid shortcut string: {shortcut_str}")
+        modifiers = parts[:-1]
+        key = parts[-1]
+        return modifiers, key
+
+    def register_shortcut(self, shortcut_str, callback):
+        modifiers, key = self.parse_shortcut(shortcut_str)
+        shortcut_id = self.next_id
+        if self.backend.register_shortcut(modifiers, key, shortcut_id, callback):
+            self.next_id += 1
+            return shortcut_id
+        raise ValueError(f"Failed to register shortcut: {shortcut_str}")
+
+    def unregister_shortcut(self, shortcut_id):
+        return self.backend.unregister_shortcut(shortcut_id)
+
+    def process_message(self, msg):
+        return self.backend.process_message(msg)
+
     def cleanup(self):
-        """Unregister all hotkeys on cleanup."""
-        for hotkey_id in list(self.hotkeys.keys()):
-            self.unregister_hotkey(hotkey_id)
+        self.backend.shortcuts.clear()
+        self.next_id = 1
 
 
-class HotkeyEventFilter(QAbstractNativeEventFilter):
+class ShortcutEventFilter(QAbstractNativeEventFilter):
     def __init__(self, manager):
         super().__init__()
         self.manager = manager
@@ -185,13 +247,12 @@ class ScreenshotApp(QMainWindow):
         self.setWindowOpacity(1.0)
         self.origin = None
         self.rubberBand = CustomRubberBand(QRubberBand.Rectangle, self)
-
         self.setFocusPolicy(Qt.StrongFocus)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.drawImage(event.rect(), self.image, event.rect())
-        painter.setBrush(QColor(0, 0, 0, 80))  # Darken with semi-transparent black
+        painter.setBrush(QColor(0, 0, 0, 0))
         painter.setPen(Qt.NoPen)
         painter.drawRect(event.rect())
 
@@ -250,20 +311,24 @@ class Im2LatexApp:
         self.setup_tray_menu()
         self.tray_icon.show()
 
-        # Initialize hotkey manager and register default hotkey
-        self.hotkey_manager = HotkeyManager()
-        self.hotkey_filter = HotkeyEventFilter(self.hotkey_manager)
-        self.app.installNativeEventFilter(self.hotkey_filter)
-        self.app.aboutToQuit.connect(self.hotkey_manager.cleanup)
+        # Initialize shortcut manager
+        self.shortcut_manager = ShortcutManager()
+        self.shortcut_filter = ShortcutEventFilter(self.shortcut_manager)
+        self.app.installNativeEventFilter(self.shortcut_filter)
+        self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
 
-        # Register initial hotkey (Win+Shift+Z)
-        try:
-            self.hotkey_manager.register_hotkey(
-                MOD_WIN | MOD_SHIFT, 0x5A, self.trigger_screenshot  # VK_Z
-            )
-            print("Hotkey Win+Shift+Z registered successfully")
-        except ValueError as e:
-            print(f"Hotkey registration failed: {e}")
+        # Callback map for actions defined in config
+        self.callback_map = {"trigger_screenshot": self.trigger_screenshot}
+
+        # Load shortcuts from config
+        for shortcut in self.config["shortcuts"]:
+            try:
+                self.shortcut_manager.register_shortcut(
+                    shortcut["shortcut_str"], self.callback_map[shortcut["action"]]
+                )
+                print(f"Shortcut {shortcut['shortcut_str']} registered successfully")
+            except ValueError as e:
+                print(f"Shortcut registration failed: {e}")
 
     def setup_tray_menu(self):
         menu = QMenu()
@@ -294,7 +359,6 @@ class Im2LatexApp:
             response = self.client.models.generate_content(
                 model="gemini-2.0-flash", contents=[self.prompt_text, pil_image]
             )
-
             raw_response = response.text.strip()
             if raw_response.startswith("```latex") or raw_response.startswith("```"):
                 raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
