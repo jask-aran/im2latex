@@ -8,8 +8,9 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey.svg)]()
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Latest Release](https://img.shields.io/badge/release-v1.0-orange.svg)](https://github.com/username/im2latex/releases)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/username/im2latex/issues)
 
-Capture a screenshot of mathematical expressions and instantly convert to LaTeX code, copied to the clipboard.
+Capture a screenshot of mathematical expressions and instantly convert to LaTeX code, copied to the clipboard, using Google Gemini Flash 2.0/ other LLM API.
 
 ![Demo](.github/new_demo.gif)
 
@@ -89,13 +90,3 @@ Supported keys include: letters (`a-z`) and numbers (`0-9`)
 2. Select the area containing mathematical expressions.
 3. The LaTeX code will be automatically copied to your clipboard.
 4. Paste the LaTeX code into your document editor.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/username/im2latex/issues)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
