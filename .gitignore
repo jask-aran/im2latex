@@ -26,3 +26,4 @@ config.json
 Thumbs.db
 
 # dev files
+generate_context.py

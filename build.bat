@@ -3,7 +3,7 @@
 REM Define paths
 set VENV_DIR=.venv
 set REQUIREMENTS_FILE=requirements.txt
-set MAIN_SCRIPT=test.py
+set MAIN_SCRIPT=main.py
 set SHORTCUTS_SCRIPT=shortcuts.py
 
 echo Checking for virtual environment...

@@ -1,7 +1,5 @@
 import sys
 import os
-import ctypes
-import ctypes.wintypes as wintypes
 import json
 from PyQt5.QtWidgets import (
     QApplication,
@@ -12,24 +10,21 @@ from PyQt5.QtWidgets import (
     QAction,
     QMessageBox,
 )
-from PyQt5.QtCore import Qt, QRect, QAbstractNativeEventFilter
+from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtMultimedia import QSound
-from PyQt5.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QImage
+from PyQt5.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QImage, QPen
 import mss
 from PIL import Image
 from google import genai
 from pathlib import Path
+from shortcuts import ShortcutManager  # Import from new module
 
-# Constants for Windows hotkey registration
-MOD_WIN = 0x0008
-MOD_SHIFT = 0x0004
-WM_HOTKEY = 0x0312
-
-# Config file settings
+# Config settings
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "api_key": "YOUR_API_KEY_HERE",
     "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
+    "shortcuts": [{"shortcut_str": "win+shift+z", "action": "trigger_screenshot"}],
 }
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
@@ -42,7 +37,7 @@ def resource_path(relative_path):
 
 
 def load_config(default_config=DEFAULT_CONFIG):
-    config_path = Path("config.json")
+    config_path = Path(CONFIG_FILE)
     try:
         config = json.loads(config_path.read_text())
         if (
@@ -68,43 +63,26 @@ def show_config_error(message):
     msg_box.setIcon(QMessageBox.Critical)
     msg_box.setWindowTitle("Im2Latex Config Error")
     msg_box.setText(message)
-
-    # Add "Open Folder" button to message box
     open_folder_button = msg_box.addButton(
         "Open Installation Folder", QMessageBox.ActionRole
     )
     msg_box.addButton(QMessageBox.Ok)
-
     msg_box.exec_()
-
-    # If user clicks "Open Folder", open the current working directory
     if msg_box.clickedButton() == open_folder_button:
-        os.startfile(os.getcwd())  # Opens the folder in File Explorer
+        os.startfile(os.getcwd())
 
 
-class GlobalHotkeyFilter(QAbstractNativeEventFilter):
-    def __init__(self, callback, hotkey_id=1, modifiers=MOD_WIN | MOD_SHIFT, vk=0x5A):
-        super().__init__()
-        self.callback = callback
-        self.hotkey_id = hotkey_id
-        self.user32 = ctypes.windll.user32
-        if not self.user32.RegisterHotKey(None, self.hotkey_id, modifiers, vk):
-            print("Failed to register hotkey. It might already be in use.")
-        else:
-            print("Hotkey registered.")
+class CustomRubberBand(QRubberBand):
+    def __init__(self, shape, parent=None):
+        super().__init__(shape, parent)
+        self.border_color = QColor(255, 255, 255)
+        self.fill_color = QColor(255, 255, 255, 50)
 
-    def nativeEventFilter(self, eventType, message):
-        if eventType == b"windows_generic_MSG":
-            msg = ctypes.cast(
-                ctypes.c_void_p(int(message)), ctypes.POINTER(wintypes.MSG)
-            ).contents
-            if msg.message == WM_HOTKEY and msg.wParam == self.hotkey_id:
-                self.callback()
-                return True, 0
-        return False, 0
-
-    def unregister(self):
-        self.user32.UnregisterHotKey(None, self.hotkey_id)
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setPen(QPen(self.border_color, 2))
+        painter.setBrush(self.fill_color)
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
 
 class ScreenshotApp(QMainWindow):
@@ -125,13 +103,13 @@ class ScreenshotApp(QMainWindow):
         self.setGeometry(virtual_rect)
         self.setWindowOpacity(1.0)
         self.origin = None
-        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        self.rubberBand = CustomRubberBand(QRubberBand.Rectangle, self)
         self.setFocusPolicy(Qt.StrongFocus)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.drawImage(event.rect(), self.image, event.rect())
-        painter.setBrush(QColor(0, 0, 0, 50))  # Darken with semi-transparent black
+        painter.setBrush(QColor(0, 0, 0, 100))
         painter.setPen(Qt.NoPen)
         painter.drawRect(event.rect())
 
@@ -175,7 +153,6 @@ class Im2LatexApp:
         self.virtual_rect = QRect()
         for screen in self.app.screens():
             self.virtual_rect = self.virtual_rect.united(screen.geometry())
-
         self.monitor_geometry = {
             "top": self.virtual_rect.top(),
             "left": self.virtual_rect.left(),
@@ -190,11 +167,22 @@ class Im2LatexApp:
         self.setup_tray_menu()
         self.tray_icon.show()
 
-        self.hotkey_filter = GlobalHotkeyFilter(
-            self.trigger_screenshot
-        )  # No parameters passed
-        self.app.installNativeEventFilter(self.hotkey_filter)
-        self.app.aboutToQuit.connect(self.hotkey_filter.unregister)
+        # Initialize shortcut manager
+        self.shortcut_manager = ShortcutManager(self.app)
+        self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
+
+        # Callback map for actions defined in config
+        self.callback_map = {"trigger_screenshot": self.trigger_screenshot}
+
+        # Load shortcuts from config
+        for shortcut in self.config["shortcuts"]:
+            try:
+                self.shortcut_manager.register_shortcut(
+                    shortcut["shortcut_str"], self.callback_map[shortcut["action"]]
+                )
+                print(f"Shortcut {shortcut['shortcut_str']} registered successfully")
+            except ValueError as e:
+                print(f"Shortcut registration failed: {e}")
 
     def setup_tray_menu(self):
         menu = QMenu()
@@ -225,7 +213,6 @@ class Im2LatexApp:
             response = self.client.models.generate_content(
                 model="gemini-2.0-flash", contents=[self.prompt_text, pil_image]
             )
-
             raw_response = response.text.strip()
             if raw_response.startswith("```latex") or raw_response.startswith("```"):
                 raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
