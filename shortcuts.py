@@ -8,13 +8,16 @@ WM_HOTKEY = 0x0312
 
 
 class ShortcutBackend:
-    def register_shortcut(self, modifiers, key, shortcut_id, callback):
+    def install_shortcut(self, modifiers, key, shortcut_id, callback):
+        """Install a system-level shortcut (backend-specific)."""
         raise NotImplementedError
 
-    def unregister_shortcut(self, shortcut_id):
+    def remove_shortcut(self, shortcut_id):
+        """Remove a system-level shortcut (backend-specific)."""
         raise NotImplementedError
 
     def process_message(self, msg):
+        """Process system messages for shortcut events."""
         raise NotImplementedError
 
     def install_event_handler(self, app):
@@ -67,7 +70,7 @@ class WindowsShortcutBackend(ShortcutBackend):
         self.user32 = ctypes.windll.user32
         self.shortcuts = {}
 
-    def register_shortcut(self, modifiers, key, shortcut_id, callback):
+    def install_shortcut(self, modifiers, key, shortcut_id, callback):
         mod_value = sum(self.MODIFIER_MAP.get(m, 0) for m in modifiers)
         key_value = self.KEY_MAP.get(key.lower(), 0)
         if not key_value:
@@ -81,7 +84,7 @@ class WindowsShortcutBackend(ShortcutBackend):
             return True
         return False
 
-    def unregister_shortcut(self, shortcut_id):
+    def remove_shortcut(self, shortcut_id):
         if shortcut_id in self.shortcuts and self.user32.UnregisterHotKey(
             None, shortcut_id
         ):
@@ -117,34 +120,55 @@ class WindowsShortcutBackend(ShortcutBackend):
 class ShortcutManager:
     @staticmethod
     def get_backend():
+        """Determine the platform-specific backend."""
         if platform.system() == "Windows":
             return WindowsShortcutBackend()
         raise NotImplementedError(f"Unsupported platform: {platform.system()}")
 
-    def __init__(self, app):
+    def __init__(self, app, shortcuts_dict, callback_map):
+        """Initialize with app, shortcuts dictionary, and callback map."""
         self.backend = self.get_backend()
         self.next_id = 1
+        self.shortcuts_dict = shortcuts_dict
+        self.callback_map = callback_map
         self.backend.install_event_handler(app)
+        self.setup_platform_shortcuts()
 
-    def parse_shortcut(self, shortcut_str):
+    def setup_platform_shortcuts(self):
+        """Set up shortcuts for the current platform from the dictionary."""
+        platform_key = platform.system().lower()
+        platform_shortcuts = self.shortcuts_dict.get(platform_key, [])
+        for shortcut in platform_shortcuts:
+            try:
+                callback = self.callback_map.get(shortcut["action"])
+                if callback:
+                    self.assign_shortcut(shortcut["shortcut_str"], callback)
+                    print(
+                        f"Shortcut {shortcut['shortcut_str']} assigned successfully to {shortcut['action']}"
+                    )
+                else:
+                    print(f"No callback found for action: {shortcut['action']}")
+            except ValueError as e:
+                print(f"Shortcut assignment failed: {e}")
+
+    def assign_shortcut(self, shortcut_str, callback):
+        """Assign a shortcut by parsing the string and delegating to the backend."""
         parts = shortcut_str.lower().split("+")
         if not parts:
             raise ValueError(f"Invalid shortcut string: {shortcut_str}")
         modifiers = parts[:-1]
         key = parts[-1]
-        return modifiers, key
-
-    def register_shortcut(self, shortcut_str, callback):
-        modifiers, key = self.parse_shortcut(shortcut_str)
         shortcut_id = self.next_id
-        if self.backend.register_shortcut(modifiers, key, shortcut_id, callback):
+        if self.backend.install_shortcut(modifiers, key, shortcut_id, callback):
             self.next_id += 1
             return shortcut_id
-        raise ValueError(f"Failed to register shortcut: {shortcut_str}")
+        raise ValueError(f"Failed to assign shortcut: {shortcut_str}")
 
-    def unregister_shortcut(self, shortcut_id):
-        return self.backend.unregister_shortcut(shortcut_id)
+    def unassign_shortcut(self, shortcut_id):
+        """Unassign a specific shortcut by ID."""
+        return self.backend.remove_shortcut(shortcut_id)
 
     def cleanup(self):
+        """Clean up all shortcuts and reset state."""
         self.backend.shortcuts.clear()
         self.next_id = 1
