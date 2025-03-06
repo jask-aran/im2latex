@@ -19,6 +19,7 @@ from google import genai
 from pathlib import Path
 from shortcuts import ShortcutManager  # Import from new module
 
+
 # Config settings
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
@@ -229,6 +230,10 @@ class Im2LatexApp:
         sys.exit(self.app.exec_())
 
 
-if __name__ == "__main__":
+def main():
     app = Im2LatexApp()
     app.run()
+
+
+if __name__ == "__main__":
+    main()

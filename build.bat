@@ -54,7 +54,7 @@ if not exist %SHORTCUTS_SCRIPT% (
 )
 
 echo Building the executable...
-pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --icon=assets/scissor.png --name=Im2Latex %MAIN_SCRIPT%
+pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --hidden-import=tzdata --hidden-import=sip --icon=assets/scissor.png --name=Im2Latex %MAIN_SCRIPT%
 if errorlevel 1 (
     echo Failed to build the executable.
     pause
