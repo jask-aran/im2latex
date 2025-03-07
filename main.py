@@ -141,7 +141,7 @@ class ScreenshotApp(QMainWindow):
                 (self.screenshot.width, self.screenshot.height),
                 self.screenshot.rgb,
             ).crop((rect.left(), rect.top(), rect.right(), rect.bottom()))
-            pil_image.save(os.path.join(os.getcwd(), "screenshot.png"), "PNG")
+            # pil_image.save(os.path.join(os.getcwd(), "screenshot.png"), "PNG")
             self.callback(pil_image)
 
     def keyPressEvent(self, event):
