@@ -25,5 +25,10 @@ config.json
 .DS_Store
 Thumbs.db
 
+# Database
+history.db
+screenshots/
+
 # dev files
 generate_context.py
+

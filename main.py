@@ -17,7 +17,8 @@ import mss
 from PIL import Image
 from google import genai
 from pathlib import Path
-from shortcuts import ShortcutManager  # Import from new module
+from shortcuts import ShortcutManager
+from storage import StorageManager
 
 
 # Config settings
@@ -158,6 +159,7 @@ class Im2LatexApp:
         self.client = genai.Client(api_key=self.config_manager.get_api_key())
         self.prompt_text = self.config_manager.get_prompt()
         self.screenshot_window = None
+        self.storage_manager = StorageManager()  # Initialize StorageManager
 
         self.virtual_rect = QRect()
         for screen in self.app.screens():
@@ -175,14 +177,17 @@ class Im2LatexApp:
         self.tray_icon.setToolTip("Im2Latex")
         menu = QMenu()
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
+        menu.addAction(
+            QAction("Print History", self.app, triggered=self.print_history)
+        )  # New action
+        menu.addAction(
+            QAction("Reset History", self.app, triggered=self.reset_history)
+        )  # New action
         menu.addAction(QAction("Exit", self.app, triggered=self.app.quit))
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        # Define callback map before initializing ShortcutManager
         self.callback_map = {"trigger_screenshot": self.trigger_screenshot}
-
-        # Initialize shortcut manager with full shortcut dictionary
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
             self.app, all_shortcuts, self.callback_map
@@ -222,9 +227,29 @@ class Im2LatexApp:
             clipboard.setText("\n".join(raw_response.splitlines()))
             print("Response copied to clipboard")
             QSound.play(resource_path("assets/beep.wav"))
+            # Save to storage
+            self.storage_manager.save_entry(
+                pil_image, self.prompt_text, raw_response, "trigger_screenshot"
+            )
 
     def open_folder(self):
         os.startfile(os.getcwd())
+
+    def print_history(self):
+        """Print the database contents for verification."""
+        self.storage_manager.print_entries()
+
+    def reset_history(self):
+        """Reset the database and confirm with the user."""
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setWindowTitle("Reset History")
+        msg_box.setText(
+            "Are you sure you want to reset the history? This will delete all saved screenshots and metadata."
+        )
+        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        if msg_box.exec_() == QMessageBox.Yes:
+            self.storage_manager.reset_db()
 
     def run(self):
         sys.exit(self.app.exec_())
