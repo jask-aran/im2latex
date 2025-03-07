@@ -120,11 +120,11 @@ class ShortcutManager:
             return WindowsShortcutBackend()
         raise NotImplementedError(f"Unsupported platform: {platform.system()}")
 
-    def __init__(self, app, shortcuts_dict, callback_map):
+    def __init__(self, app, shortcuts_dict, callback):
         self.backend = self.get_backend()
         self.next_id = 1
         self.shortcuts_dict = shortcuts_dict
-        self.callback_map = callback_map
+        self.callback = callback  # Single callback instead of a map
         self.backend.install_event_handler(app)
         self.setup_platform_shortcuts()
 
@@ -133,13 +133,9 @@ class ShortcutManager:
         platform_shortcuts = self.shortcuts_dict.get(platform_key, [])
         for shortcut in platform_shortcuts:
             action = shortcut["action"]
-            callback = self.callback_map.get(action)
-            if not callback:
-                print(
-                    f"Warning: No callback found for action '{action}' in shortcut '{shortcut['shortcut_str']}'"
-                )
-                continue
-            shortcut_id = self.assign_shortcut(shortcut["shortcut_str"], callback)
+            shortcut_id = self.assign_shortcut(
+                shortcut["shortcut_str"], lambda: self.callback(action)
+            )
             if shortcut_id:
                 print(
                     f"Registered shortcut '{shortcut['shortcut_str']}' for action '{action}' (ID: {shortcut_id})"
@@ -152,17 +148,14 @@ class ShortcutManager:
     def assign_shortcut(self, shortcut_str, callback):
         parts = shortcut_str.lower().split("+")
         if not parts:
-            return False  # Invalid format
+            return False
         modifiers = parts[:-1]
         key = parts[-1]
         shortcut_id = self.next_id
         if self.backend.install_shortcut(modifiers, key, shortcut_id, callback):
             self.next_id += 1
             return shortcut_id
-        return False  # Registration failed
-
-    def unassign_shortcut(self, shortcut_id):
-        return self.backend.remove_shortcut(shortcut_id)
+        return False
 
     def cleanup(self):
         self.backend.shortcuts.clear()

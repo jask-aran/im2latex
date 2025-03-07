@@ -191,26 +191,26 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        self.callback_map = {
-            "math2latex": self.process_math2latex,
-            "text_extraction": self.process_text_extraction,
-        }
+        # Single callback passed to ShortcutManager
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
-            self.app, all_shortcuts, self.callback_map
+            self.app, all_shortcuts, self.handle_action
         )
         self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
 
-    def trigger_screenshot(self, callback):
-        """Utility function to trigger a screenshot and pass it to a callback."""
+    def trigger_screenshot(self, action):
+        """Trigger a screenshot and process it with the given action."""
         self.screenshot_window = ScreenshotApp(
-            callback, self.monitor_geometry, self.virtual_rect
+            lambda pil_image: self.process_image(pil_image, action),
+            self.monitor_geometry,
+            self.virtual_rect,
         )
         self.screenshot_window.show()
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
 
     def send_to_api(self, pil_image, action):
+        """Send image to API and return response text."""
         try:
             print(f"Sending to API for action: {action}")
             self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
@@ -224,46 +224,40 @@ class Im2LatexApp:
             return response.text
         except Exception as e:
             print(f"Failed to send to API: {e}")
+            self.tray_icon.showMessage(
+                "Im2Latex", f"API error: {e}", QSystemTrayIcon.Warning
+            )
             return None
 
-    def process_response(self, pil_image, action):
-        """Process the API response for a given action."""
+    def process_image(self, pil_image, action):
+        """Process the screenshot image and handle the API response."""
         response_text = self.send_to_api(pil_image, action)
         if response_text:
-            raw_response = response_text.strip()
-            if raw_response.startswith("```latex") or raw_response.startswith("```"):
-                raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
-            raw_response = raw_response.strip()
-            print(f"API response: {raw_response}")
-            clipboard = self.app.clipboard()
-            clipboard.setText("\n".join(raw_response.splitlines()))
+            # Clean up response text
+            response = response_text.strip()
+            if response.startswith("```latex") or response.startswith("```"):
+                response = response.split("\n", 1)[-1].rsplit("\n", 1)[0].strip()
+            print(f"API response: {response}")
+
+            # Copy to clipboard and save
+            self.app.clipboard().setText(response)
             print("Response copied to clipboard")
             QSound.play(resource_path("assets/beep.wav"))
             self.storage_manager.save_entry(
-                pil_image, self.config_manager.get_prompt(action), raw_response, action
+                pil_image, self.config_manager.get_prompt(action), response, action
             )
 
-    def process_math2latex(self):
-        """Action handler for math2latex."""
-        self.trigger_screenshot(
-            lambda pil_image: self.process_response(pil_image, "math2latex")
-        )
-
-    def process_text_extraction(self):
-        """Action handler for text_extraction."""
-        self.trigger_screenshot(
-            lambda pil_image: self.process_response(pil_image, "text_extraction")
-        )
+    def handle_action(self, action):
+        """Handle shortcut actions by triggering a screenshot."""
+        self.trigger_screenshot(action)
 
     def open_folder(self):
         os.startfile(os.getcwd())
 
     def print_history(self):
-        """Print the database contents for verification."""
         self.storage_manager.print_entries()
 
     def reset_history(self):
-        """Reset the database and delete screenshots without confirmation."""
         self.storage_manager.reset_db()
 
     def run(self):
