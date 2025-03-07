@@ -2,6 +2,7 @@ import sqlite3
 import os
 from pathlib import Path
 from datetime import datetime
+import shutil
 
 
 class StorageManager:
@@ -30,12 +31,18 @@ class StorageManager:
             conn.commit()
 
     def reset_db(self):
-        """Reset the database by dropping and recreating the table."""
+        """Reset the database and delete all saved screenshots."""
+        # Delete the screenshots folder and its contents
+        if self.screenshots_dir.exists():
+            shutil.rmtree(self.screenshots_dir)
+        self.screenshots_dir.mkdir()  # Recreate the empty folder
+
+        # Drop and recreate the table
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DROP TABLE IF EXISTS screenshots")
             conn.commit()
         self.initialize_db()
-        print("Database reset successfully.")
+        print("Database and screenshots reset successfully.")
 
     def save_entry(self, image, prompt, raw_response, shortcut):
         """Save the screenshot and metadata to the filesystem and database."""
@@ -69,7 +76,9 @@ class StorageManager:
             )
             conn.commit()
 
-        print(f"Saved entry: ID={entry_id}, Timestamp={timestamp}, Shortcut={shortcut}")
+        print(
+            f"Saved entry: ID={entry_id}, Timestamp={timestamp}, Shortcut={shortcut}\n"
+        )
 
     def get_all_entries(self):
         """Retrieve all entries in reverse chronological order."""
@@ -100,7 +109,7 @@ class StorageManager:
             print(f"Timestamp: {timestamp}")
             print(f"Image Path: {image_path}")
             # print(f"Prompt: {prompt}")
-            print(f"Raw Response: {raw_response}")
+            print(f"Raw Response: \n{raw_response}")
             print(f"Shortcut: {shortcut}")
             print(f"Output Type: {output_type}")
             print("-" * 50)

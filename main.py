@@ -25,9 +25,15 @@ from storage import StorageManager
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "api_key": "YOUR_API_KEY_HERE",
-    "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image’s visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
+    "prompts": {
+        "math2latex": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image’s visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
+        "text_extraction": "Extract all text from this image and return it as plain text.",
+    },
     "shortcuts": {
-        "windows": [{"shortcut_str": "win+shift+z", "action": "trigger_screenshot"}]
+        "windows": [
+            {"shortcut_str": "ctrl+shift+z", "action": "math2latex"},
+            {"shortcut_str": "ctrl+shift+x", "action": "text_extraction"},
+        ]
     },
 }
 
@@ -51,6 +57,8 @@ class ConfigManager:
             config = json.loads(self.file_path.read_text())
             if not isinstance(config, dict) or not config.get("api_key", "").strip():
                 raise ValueError("Invalid or missing API key")
+            if "prompts" not in config or not config["prompts"]:
+                raise ValueError("No prompts defined")
             return config
         except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
             self.file_path.write_text(json.dumps(self.default_config, indent=4))
@@ -75,11 +83,12 @@ class ConfigManager:
     def get_all_shortcuts(self):
         return self.config.get("shortcuts", {})
 
-    def get_prompt(self):
-        return self.config.get("prompt", "")
-
     def get_api_key(self):
         return self.config.get("api_key", "")
+
+    def get_prompt(self, action):
+        """Retrieve the prompt text for a given action."""
+        return self.config.get("prompts", {}).get(action, "")
 
 
 class CustomRubberBand(QRubberBand):
@@ -157,9 +166,8 @@ class Im2LatexApp:
         self.app.setQuitOnLastWindowClosed(False)
         self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
         self.client = genai.Client(api_key=self.config_manager.get_api_key())
-        self.prompt_text = self.config_manager.get_prompt()
         self.screenshot_window = None
-        self.storage_manager = StorageManager()  # Initialize StorageManager
+        self.storage_manager = StorageManager()
 
         self.virtual_rect = QRect()
         for screen in self.app.screens():
@@ -177,37 +185,40 @@ class Im2LatexApp:
         self.tray_icon.setToolTip("Im2Latex")
         menu = QMenu()
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
-        menu.addAction(
-            QAction("Print History", self.app, triggered=self.print_history)
-        )  # New action
-        menu.addAction(
-            QAction("Reset History", self.app, triggered=self.reset_history)
-        )  # New action
+        menu.addAction(QAction("Print History", self.app, triggered=self.print_history))
+        menu.addAction(QAction("Reset History", self.app, triggered=self.reset_history))
         menu.addAction(QAction("Exit", self.app, triggered=self.app.quit))
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        self.callback_map = {"trigger_screenshot": self.trigger_screenshot}
+        self.callback_map = {
+            "math2latex": self.process_math2latex,
+            "text_extraction": self.process_text_extraction,
+        }
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
             self.app, all_shortcuts, self.callback_map
         )
         self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
 
-    def trigger_screenshot(self):
+    def trigger_screenshot(self, callback):
+        """Utility function to trigger a screenshot and pass it to a callback."""
         self.screenshot_window = ScreenshotApp(
-            self.process_response, self.monitor_geometry, self.virtual_rect
+            callback, self.monitor_geometry, self.virtual_rect
         )
         self.screenshot_window.show()
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
 
-    def send_to_api(self, pil_image):
+    def send_to_api(self, pil_image, action):
         try:
-            print("Sending to API")
+            print(f"Sending to API for action: {action}")
             self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
+            prompt_text = self.config_manager.get_prompt(action)
+            if not prompt_text:
+                raise ValueError(f"No prompt defined for action: {action}")
             response = self.client.models.generate_content(
-                model="gemini-2.0-flash", contents=[self.prompt_text, pil_image]
+                model="gemini-2.0-flash", contents=[prompt_text, pil_image]
             )
             self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
             return response.text
@@ -215,8 +226,9 @@ class Im2LatexApp:
             print(f"Failed to send to API: {e}")
             return None
 
-    def process_response(self, pil_image):
-        response_text = self.send_to_api(pil_image)
+    def process_response(self, pil_image, action):
+        """Process the API response for a given action."""
+        response_text = self.send_to_api(pil_image, action)
         if response_text:
             raw_response = response_text.strip()
             if raw_response.startswith("```latex") or raw_response.startswith("```"):
@@ -227,10 +239,21 @@ class Im2LatexApp:
             clipboard.setText("\n".join(raw_response.splitlines()))
             print("Response copied to clipboard")
             QSound.play(resource_path("assets/beep.wav"))
-            # Save to storage
             self.storage_manager.save_entry(
-                pil_image, self.prompt_text, raw_response, "trigger_screenshot"
+                pil_image, self.config_manager.get_prompt(action), raw_response, action
             )
+
+    def process_math2latex(self):
+        """Action handler for math2latex."""
+        self.trigger_screenshot(
+            lambda pil_image: self.process_response(pil_image, "math2latex")
+        )
+
+    def process_text_extraction(self):
+        """Action handler for text_extraction."""
+        self.trigger_screenshot(
+            lambda pil_image: self.process_response(pil_image, "text_extraction")
+        )
 
     def open_folder(self):
         os.startfile(os.getcwd())
@@ -240,16 +263,8 @@ class Im2LatexApp:
         self.storage_manager.print_entries()
 
     def reset_history(self):
-        """Reset the database and confirm with the user."""
-        msg_box = QMessageBox()
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowTitle("Reset History")
-        msg_box.setText(
-            "Are you sure you want to reset the history? This will delete all saved screenshots and metadata."
-        )
-        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        if msg_box.exec_() == QMessageBox.Yes:
-            self.storage_manager.reset_db()
+        """Reset the database and delete screenshots without confirmation."""
+        self.storage_manager.reset_db()
 
     def run(self):
         sys.exit(self.app.exec_())
