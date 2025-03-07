@@ -26,17 +26,14 @@ Capture a screenshot of mathematical expressions and instantly convert it to LaT
 ---
 
 ## Setup
+1. **Clone Repo**  
 
-### Basic Setup
-1. **Clone or Download the Repository**  
-   Clone this project to a folder of your choice or download and extract the ZIP:
    ```
    git clone https://github.com/jask-aran/im2latex.git
    cd im2latex
    ```
 
 2. **Set Up Virtual Environment & Install Dependencies**  
-   Create and activate a virtual environment:
    ```
    python -m venv .venv
    .venv\Scripts\activate  # Windows
@@ -54,7 +51,6 @@ Capture a screenshot of mathematical expressions and instantly convert it to LaT
    - Edit `config.json` in the project folder to add your Google Generative AI API key
 
 5. **Run the Application**  
-   Start the app directly:
    ```
    .venv\Scripts\activate
    python main.py
@@ -62,15 +58,13 @@ Capture a screenshot of mathematical expressions and instantly convert it to LaT
 
 ### Optional: Install as a Windows App
 To make Im2Latex act like an installed application (accessible via Windows Search or Start Menu):
-1. Run the provided `install.bat` script from the repository root:
-   ```
-   install.bat
-   ```
-2. What `install.bat` does:
-   - Creates a virtual environment (`.venv`) in the current directory if it doesn’t exist.
-   - Installs dependencies from `requirements.txt` into the venv.
-   - Adds a Start Menu shortcut named "Im2Latex" that runs `main.py` using the venv’s Python, with the `scissor.ico` icon from `assets/`.
-3. Launch Im2Latex from Windows Search or Start Menu as "Im2Latex".
+1. Run the provided `install.bat` script from the repository root
+2. Launch Im2Latex from Windows Search or Start Menu as "Im2Latex".
+
+#### What `install.bat` does:
+  - Creates a virtual environment (`.venv`) in the current directory if it doesn’t exist.
+  - Installs dependencies from `requirements.txt` into the venv.
+  - Adds a Start Menu shortcut named "Im2Latex" that runs `main.py` using the venv’s Python instance
 
 **Note:** If you move the repository folder after running `install.bat`, the shortcut will break unless you rerun the script to update it.
 
