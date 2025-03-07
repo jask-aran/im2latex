@@ -57,9 +57,9 @@ if not exist "%ICON_PATH%" (
     echo Warning: Icon file '%ICON_PATH%' not found. Shortcut will use default icon.
 )
 
-REM Create Start Menu shortcut (Option 1: Using venv python.exe)
+REM Create Start Menu shortcut using pythonw.exe to hide console
 echo Creating Start Menu shortcut...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$Shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT_PATH%'); $Shortcut.TargetPath = '%CURRENT_DIR%\%VENV_DIR%\Scripts\python.exe'; $Shortcut.Arguments = '%CURRENT_DIR%\%PYTHON_SCRIPT%'; $Shortcut.WorkingDirectory = '%CURRENT_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Description = 'Convert images to LaTeX'; $Shortcut.Save()" 2> install_error.log
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$Shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT_PATH%'); $Shortcut.TargetPath = '%CURRENT_DIR%\%VENV_DIR%\Scripts\pythonw.exe'; $Shortcut.Arguments = '%CURRENT_DIR%\%PYTHON_SCRIPT%'; $Shortcut.WorkingDirectory = '%CURRENT_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Description = 'Convert images to LaTeX'; $Shortcut.Save()" 2> install_error.log
 if errorlevel 1 (
     echo Failed to create Start Menu shortcut. Check install_error.log for details.
     type install_error.log
@@ -69,10 +69,7 @@ if errorlevel 1 (
     echo Start Menu shortcut created successfully.
 )
 
-REM Alternative (commented out) - Point directly to main.py (uncomment if preferred)
-REM powershell -NoProfile -ExecutionPolicy Bypass -Command "$Shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT_PATH%'); $Shortcut.TargetPath = '%CURRENT_DIR%\%PYTHON_SCRIPT%'; $Shortcut.WorkingDirectory = '%CURRENT_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Description = 'Convert images to LaTeX'; $Shortcut.Save()" 2> install_error.log
-
-echo Setup complete! You can now launch 'Im2Latex' from Windows Search or the Start Menu.
-echo To run manually, use: %VENV_DIR%\Scripts\python %PYTHON_SCRIPT%
+echo Setup complete! You can now launch 'Im2Latex' from Windows Search or the Start Menu without a console window.
+echo To run manually without a console, use: %VENV_DIR%\Scripts\pythonw %PYTHON_SCRIPT%
 
 pause

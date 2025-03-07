@@ -58,7 +58,7 @@ Capture a screenshot of mathematical expressions and instantly convert it to LaT
 
 ### Optional: Install as a Windows App
 To make Im2Latex act like an installed application (accessible via Windows Search or Start Menu):
-1. Run the provided `install.bat` script from the repository root
+1. Run the provided `install.bat` script from the repository root. This uses .venv\Scripts\pythonw main.py to launch without a console window.
 2. Launch Im2Latex from Windows Search or Start Menu as "Im2Latex".
 
 #### What `install.bat` does:
