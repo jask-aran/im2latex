@@ -10,7 +10,8 @@
 [![Latest Release](https://img.shields.io/badge/release-v1.0-orange.svg)](https://github.com/username/im2latex/releases)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/username/im2latex/issues)
 
-Capture a screenshot of mathematical expressions and instantly convert to LaTeX code, copied to the clipboard, using Google Gemini Flash 2.0/ other LLM API.
+
+Capture a screenshot of mathematical expressions and instantly convert it to LaTeX code, copied to your clipboard, using Google Gemini Flash 2.0 or another LLM API.
 
 ![Demo](.github/new_demo.gif)
 
@@ -19,74 +20,81 @@ Capture a screenshot of mathematical expressions and instantly convert to LaTeX 
 - **Instant Conversion**: Capture any math expression and get LaTeX code on your clipboard.
 - **System Tray**: Runs quietly in the background.
 - **Custom Shortcuts**: Configurable via `config.json` (Windows default: `Win+Shift+Z`).
-- **Sound Feedback**: Audio queue when conversion is done and LaTeX ready to paste.
+- **Sound Feedback**: Audio cue when conversion is done and LaTeX is ready to paste.
 - **Platform Goals**: Windows-ready now; Linux/macOS support coming soon.
 
 ---
 
-## Installation
+## Setup
 
-### From Release
-
-1. Download the latest `Im2Latex.exe` from [Releases](https://github.com/username/im2latex/releases).
-2. Run `install.bat` from the same directory.
-   - Enter an installation directory when prompted (press Enter for default: `%LOCALAPPDATA%\Im2Latex`).
-   - The script copies the `.exe` to this directory and adds a Start Menu shortcut, making it accessible via Windows Search or Start Menu.
-3. Proceed to [Configuration](#configuration).
-
-### Build Manually
-
-#### Option 1: Use the script
-- Run `build.bat` in the project root. It creates a virtual environment, installs dependencies from `requirements.txt`, and builds the `.exe` using PyInstaller. The executable will be in the `dist` folder.
-- Run `install.bat` from the project root to copy the `.exe` from `dist` to your chosen directory and add it to Windows Search/Start Menu.
-
-#### Option 2: Manual steps
-- Create a virtual environment: `python -m venv .venv`
-- Activate it: `.venv\Scripts\activate.bat`
-- Install dependencies: `pip install -r requirements.txt`
-- Build the executable: `pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --icon=assets/scissor.png --name=Im2Latex main.py`
-- Find the `.exe` in the `dist` folder.
-- Run `install.bat` to copy the `.exe` from `dist` to your chosen directory and add it to Windows Search/Start Menu.
-
-### Configuration
-
-1. Launch `Im2Latex.exe` once after installation. This creates a default `config.json` file in the installation directory.
-2. Edit `config.json` to add your Google Generative AI API key:
-   ```json
-   {
-     "api_key": "YOUR_API_KEY_HERE",
-     "prompt": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
-     "shortcuts": {
-       "windows": [
-         {"shortcut_str": "win+shift+z", "action": "trigger_screenshot"}
-       ]
-     }
-   }
+### Basic Setup
+1. **Clone or Download the Repository**  
+   Clone this project to a folder of your choice or download and extract the ZIP:
    ```
+   git clone https://github.com/jask-aran/im2latex.git
+   cd im2latex
+   ```
+
+2. **Set Up Virtual Environment & Install Dependencies**  
+   Create and activate a virtual environment:
+   ```
+   python -m venv .venv
+   .venv\Scripts\activate  # Windows
+   source .venv/bin/activate  # Linux/macOS
+
+   pip install -r requirements.txt
+   ```
+
+3. **Configure API Key**  
+   - Run `main.py` once to generate a default `config.json`:
+    ```
+    .venv\Scripts\activate
+    python main.py
+    ```
+   - Edit `config.json` in the project folder to add your Google Generative AI API key
+
+5. **Run the Application**  
+   Start the app directly:
+   ```
+   .venv\Scripts\activate
+   python main.py
+   ```
+
+### Optional: Install as a Windows App
+To make Im2Latex act like an installed application (accessible via Windows Search or Start Menu):
+1. Run the provided `install.bat` script from the repository root:
+   ```
+   install.bat
+   ```
+2. What `install.bat` does:
+   - Creates a virtual environment (`.venv`) in the current directory if it doesn’t exist.
+   - Installs dependencies from `requirements.txt` into the venv.
+   - Adds a Start Menu shortcut named "Im2Latex" that runs `main.py` using the venv’s Python, with the `scissor.ico` icon from `assets/`.
+3. Launch Im2Latex from Windows Search or Start Menu as "Im2Latex".
+
+**Note:** If you move the repository folder after running `install.bat`, the shortcut will break unless you rerun the script to update it.
+
+---
 
 ## Customizing Shortcuts
 
-You can modify the default shortcut (`Win+Shift+Z`) by editing the `config.json` file:
+Modify the default shortcut (`Win+Shift+Z`) by editing `config.json`:
+1. Open `config.json` in the project folder.
+2. Update the `shortcuts` section:
+   ```json
+   "shortcuts": {
+     "windows": [
+       {"shortcut_str": "ctrl+alt+m", "action": "trigger_screenshot"}
+     ]
+   }
+   ```
+3. Supported modifiers: `win`, `ctrl`, `alt`, `shift`  
+   Supported keys: `a-z`, `0-9`
 
-1. Open `config.json` in your installation directory
-2. Locate the `shortcuts` section
-3. Modify the `shortcut_str` value to your preferred key combination
 
-Example for a different shortcut:
-```json
-"shortcuts": {
-  "windows": [
-    {"shortcut_str": "ctrl+alt+m", "action": "trigger_screenshot"}
-  ]
-}
-```
-
-Supported modifiers include: `win`, `ctrl`, `alt`, and `shift`  
-Supported keys include: letters (`a-z`) and numbers (`0-9`)
-
-## Usage
-
-1. Press the shortcut key (default: `Win+Shift+Z`) to capture a screenshot.
-2. Select the area containing mathematical expressions.
-3. The LaTeX code will be automatically copied to your clipboard.
-4. Paste the LaTeX code into your document editor.
+#### Pyinstaller
+- Create a virtual environment: `python -m venv .venv`
+- Activate it: `.venv\Scripts\activate.bat`
+- Install dependencies: `pip install -r requirements.txt`
+- Build the executable: `pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --hidden-import=tzdata --hidden-import=sip --icon=assets/scissor.png --name=Im2Latex main.py`
+- Find the `.exe` in the `dist` folder.
