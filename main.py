@@ -159,9 +159,14 @@ class Im2LatexApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
+        self.screenshot_window = None
         self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
         self.client = genai.Client(api_key=self.config_manager.get_api_key())
-        self.screenshot_window = None
+        all_shortcuts = self.config_manager.get_all_shortcuts()
+        self.shortcut_manager = ShortcutManager(
+            self.app, all_shortcuts, self.run_pipeline
+        )
+        self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
         self.storage_manager = StorageManager()
 
         self.virtual_rect = QRect()
@@ -174,9 +179,7 @@ class Im2LatexApp:
             "height": self.virtual_rect.height(),
         }
 
-        self.tray_icon = QSystemTrayIcon(
-            QIcon(resource_path("assets/scissor.png")), self.app
-        )
+        self.tray_icon = QSystemTrayIcon(QIcon("assets/scissor.png"), self.app)
         self.tray_icon.setToolTip("Im2Latex")
         menu = QMenu()
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
@@ -186,16 +189,7 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        # Pass only run_pipeline (bound method)
-        all_shortcuts = self.config_manager.get_all_shortcuts()
-        self.shortcut_manager = ShortcutManager(
-            self.app, all_shortcuts, self.run_pipeline
-        )
-        self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
-
     def run_pipeline(self, action):
-        """Orchestrate the pipeline: screenshot -> API call -> process response, with error handling and debugging."""
-
         def handle_screenshot(pil_image):
             self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
 
