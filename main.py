@@ -17,8 +17,10 @@ import mss
 from PIL import Image
 from google import genai
 from pathlib import Path
+
 from shortcuts import ShortcutManager
 from storage import StorageManager
+from gui import HistoryWindow
 
 
 # Config settings
@@ -160,6 +162,7 @@ class Im2LatexApp:
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         self.screenshot_window = None
+        self.history_window = None
         self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
         self.client = genai.Client(api_key=self.config_manager.get_api_key())
         all_shortcuts = self.config_manager.get_all_shortcuts()
@@ -182,6 +185,7 @@ class Im2LatexApp:
         self.tray_icon = QSystemTrayIcon(QIcon("assets/scissor.png"), self.app)
         self.tray_icon.setToolTip("Im2Latex")
         menu = QMenu()
+        menu.addAction(QAction("Open GUI", self.app, triggered=self.show_history))
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
         menu.addAction(QAction("Print History", self.app, triggered=self.print_history))
         menu.addAction(QAction("Reset History", self.app, triggered=self.reset_history))
@@ -241,6 +245,14 @@ class Im2LatexApp:
         self.storage_manager.save_entry(
             pil_image, self.config_manager.get_prompt(action), raw_response, action
         )
+
+    def show_history(self):
+        if self.history_window is None or not self.history_window.isVisible():
+            self.history_window = HistoryWindow(self.storage_manager)
+            self.history_window.show()
+        else:
+            self.history_window.raise_()  # Bring to front if already open
+            self.history_window.activateWindow()
 
     def open_folder(self):
         os.startfile(os.getcwd())
