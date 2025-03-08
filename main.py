@@ -91,19 +91,6 @@ class ConfigManager:
         return self.config.get("prompts", {}).get(action, "")
 
 
-class CustomRubberBand(QRubberBand):
-    def __init__(self, shape, parent=None):
-        super().__init__(shape, parent)
-        self.border_color = QColor(255, 255, 255)
-        self.fill_color = QColor(255, 255, 255, 50)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setPen(QPen(self.border_color, 2))
-        painter.setBrush(self.fill_color)
-        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
-
-
 class ScreenshotApp(QMainWindow):
     def __init__(self, callback, monitor_geometry, virtual_rect):
         super().__init__()
@@ -122,6 +109,15 @@ class ScreenshotApp(QMainWindow):
         self.setGeometry(virtual_rect)
         self.setWindowOpacity(1.0)
         self.origin = None
+
+        # Define CustomRubberBand as an inner class
+        class CustomRubberBand(QRubberBand):
+            def paintEvent(self, event):
+                painter = QPainter(self)
+                painter.setPen(QPen(QColor(255, 255, 255), 2))  # White border, 2px
+                painter.setBrush(QColor(255, 255, 255, 50))  # White fill, 50% opacity
+                painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+
         self.rubberBand = CustomRubberBand(QRubberBand.Rectangle, self)
         self.setFocusPolicy(Qt.StrongFocus)
 
@@ -190,13 +186,10 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        self.callback_map = {
-            "math2latex": lambda: self.run_pipeline("math2latex"),
-            "text_extraction": lambda: self.run_pipeline("text_extraction"),
-        }
+        # Pass only run_pipeline (bound method)
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
-            self.app, all_shortcuts, self.callback_map
+            self.app, all_shortcuts, self.run_pipeline
         )
         self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
 
