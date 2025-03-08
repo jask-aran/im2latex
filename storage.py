@@ -76,9 +76,7 @@ class StorageManager:
             )
             conn.commit()
 
-        print(
-            f"Saved entry: ID={entry_id}, Timestamp={timestamp}, Shortcut={shortcut}\n"
-        )
+        print(f"Saved entry: ID={entry_id}, Timestamp={timestamp}, Shortcut={shortcut}")
 
     def get_all_entries(self):
         """Retrieve all entries in reverse chronological order."""

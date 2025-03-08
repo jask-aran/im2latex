@@ -24,7 +24,7 @@ from storage import StorageManager
 # Config settings
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
-    "api_key": "YOUR_API_KEY_HERE",
+    "api_key": "[MASKED_API_KEY]",
     "prompts": {
         "math2latex": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image’s visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
         "text_extraction": "Extract all text from this image and return it as plain text.",
@@ -151,7 +151,6 @@ class ScreenshotApp(QMainWindow):
                 (self.screenshot.width, self.screenshot.height),
                 self.screenshot.rgb,
             ).crop((rect.left(), rect.top(), rect.right(), rect.bottom()))
-            # pil_image.save(os.path.join(os.getcwd(), "screenshot.png"), "PNG")
             self.callback(pil_image)
 
     def keyPressEvent(self, event):
@@ -191,65 +190,70 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        # Single callback passed to ShortcutManager
+        self.callback_map = {
+            "math2latex": lambda: self.run_pipeline("math2latex"),
+            "text_extraction": lambda: self.run_pipeline("text_extraction"),
+        }
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
-            self.app, all_shortcuts, self.handle_action
+            self.app, all_shortcuts, self.callback_map
         )
         self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
 
-    def trigger_screenshot(self, action):
-        """Trigger a screenshot and process it with the given action."""
+    def run_pipeline(self, action):
+        """Orchestrate the pipeline: screenshot -> API call -> process response, with error handling and debugging."""
+
+        def handle_screenshot(pil_image):
+            self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
+
+            try:
+                prompt_text = self.config_manager.get_prompt(action)
+                if not prompt_text:
+                    raise ValueError(f"No prompt defined for action: {action}")
+
+                print(f"Sending to API with action: {action}")
+
+                response_text = self.send_to_api(pil_image, prompt_text)
+                print(f"API response received: \n```\n{response_text}\n```")
+
+                self.process_response(response_text, action, pil_image)
+                print("Response processed and copied to clipboard\n")
+
+            except Exception as e:
+                print(f"Pipeline error: {e}")
+            finally:
+                self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
+
         self.screenshot_window = ScreenshotApp(
-            lambda pil_image: self.process_image(pil_image, action),
-            self.monitor_geometry,
-            self.virtual_rect,
+            handle_screenshot, self.monitor_geometry, self.virtual_rect
         )
         self.screenshot_window.show()
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
 
-    def send_to_api(self, pil_image, action):
-        """Send image to API and return response text."""
-        try:
-            print(f"Sending to API for action: {action}")
-            self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
-            prompt_text = self.config_manager.get_prompt(action)
-            if not prompt_text:
-                raise ValueError(f"No prompt defined for action: {action}")
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash", contents=[prompt_text, pil_image]
-            )
-            self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
-            return response.text
-        except Exception as e:
-            print(f"Failed to send to API: {e}")
-            self.tray_icon.showMessage(
-                "Im2Latex", f"API error: {e}", QSystemTrayIcon.Warning
-            )
-            return None
+    def send_to_api(self, pil_image, prompt_text):
+        response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=[prompt_text, pil_image]
+        )
+        response_text = response.text
+        if not response_text:  # Check for empty or None response
+            raise ValueError("API returned an empty or invalid response")
+        return response_text
 
-    def process_image(self, pil_image, action):
-        """Process the screenshot image and handle the API response."""
-        response_text = self.send_to_api(pil_image, action)
-        if response_text:
-            # Clean up response text
-            response = response_text.strip()
-            if response.startswith("```latex") or response.startswith("```"):
-                response = response.split("\n", 1)[-1].rsplit("\n", 1)[0].strip()
-            print(f"API response: {response}")
+    def process_response(self, response_text, action, pil_image):
+        raw_response = response_text.strip()
+        if raw_response.startswith("```latex") or raw_response.startswith("```"):
+            raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
+        raw_response = raw_response.strip()
 
-            # Copy to clipboard and save
-            self.app.clipboard().setText(response)
-            print("Response copied to clipboard")
-            QSound.play(resource_path("assets/beep.wav"))
-            self.storage_manager.save_entry(
-                pil_image, self.config_manager.get_prompt(action), response, action
-            )
+        clipboard = self.app.clipboard()
+        clipboard.setText("\n".join(raw_response.splitlines()))
 
-    def handle_action(self, action):
-        """Handle shortcut actions by triggering a screenshot."""
-        self.trigger_screenshot(action)
+        QSound.play(resource_path("assets/beep.wav"))
+
+        self.storage_manager.save_entry(
+            pil_image, self.config_manager.get_prompt(action), raw_response, action
+        )
 
     def open_folder(self):
         os.startfile(os.getcwd())

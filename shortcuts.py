@@ -120,30 +120,13 @@ class ShortcutManager:
             return WindowsShortcutBackend()
         raise NotImplementedError(f"Unsupported platform: {platform.system()}")
 
-    def __init__(self, app, shortcuts_dict, callback):
+    def __init__(self, app, shortcuts_dict, callback_map):
         self.backend = self.get_backend()
         self.next_id = 1
         self.shortcuts_dict = shortcuts_dict
-        self.callback = callback  # Single callback instead of a map
+        self.callback_map = callback_map
         self.backend.install_event_handler(app)
         self.setup_platform_shortcuts()
-
-    def setup_platform_shortcuts(self):
-        platform_key = platform.system().lower()
-        platform_shortcuts = self.shortcuts_dict.get(platform_key, [])
-        for shortcut in platform_shortcuts:
-            action = shortcut["action"]
-            shortcut_id = self.assign_shortcut(
-                shortcut["shortcut_str"], lambda: self.callback(action)
-            )
-            if shortcut_id:
-                print(
-                    f"Registered shortcut '{shortcut['shortcut_str']}' for action '{action}' (ID: {shortcut_id})"
-                )
-            else:
-                print(
-                    f"Could not register shortcut '{shortcut['shortcut_str']}' (likely already in use)"
-                )
 
     def assign_shortcut(self, shortcut_str, callback):
         parts = shortcut_str.lower().split("+")
@@ -156,6 +139,30 @@ class ShortcutManager:
             self.next_id += 1
             return shortcut_id
         return False
+
+    def setup_platform_shortcuts(self):
+        platform_key = platform.system().lower()
+        platform_shortcuts = self.shortcuts_dict.get(platform_key, [])
+        for shortcut in platform_shortcuts:
+            action = shortcut["action"]
+            callback = self.callback_map.get(action)
+            if not callback:
+                print(
+                    f"Warning: No callback found for action '{action}' in shortcut '{shortcut['shortcut_str']}'"
+                )
+                continue
+            shortcut_id = self.assign_shortcut(shortcut["shortcut_str"], callback)
+            if shortcut_id:
+                print(
+                    f"Registered shortcut '{shortcut['shortcut_str']}' for action '{action}' (ID: {shortcut_id})"
+                )
+            else:
+                print(
+                    f"Could not register shortcut '{shortcut['shortcut_str']}' (likely already in use)"
+                )
+
+    def unassign_shortcut(self, shortcut_id):
+        return self.backend.remove_shortcut(shortcut_id)
 
     def cleanup(self):
         self.backend.shortcuts.clear()
