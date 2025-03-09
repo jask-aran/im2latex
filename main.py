@@ -24,6 +24,7 @@ from gui import HistoryWindow
 
 ICON_NORMAL = "assets/scissor.png"
 ICON_LOADING = "assets/sand-clock.png"
+SOUND_DONE = "assets/beep.wav"
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "api_key": "[MASKED_API_KEY]",
@@ -176,11 +177,74 @@ class ApiWorker(QObject):
                 model="gemini-2.0-flash", contents=[self.prompt_text, self.image]
             )
             response_text = response.text
+
             if not response_text:  # Check for empty or None response
                 raise ValueError("API returned an empty or invalid response")
+
+            response_text = response_text.strip()
+            if response_text.startswith("```latex") or response_text.startswith("```"):
+                response_text = response_text.split("\n", 1)[-1].rsplit("\n", 1)[0]
+            response_text = response_text.strip()
+
             self.finished.emit(response_text, self.action, self.image)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class ApiManager(QObject):
+    api_response_ready = pyqtSignal(
+        str, str, Image.Image
+    )  # response_text, action, image
+    api_error = pyqtSignal(str)
+
+    def __init__(self, api_key):
+        super().__init__()
+        self.client = genai.Client(api_key=api_key)
+        self.thread = None
+        self.worker = None
+        self.api_in_progress = False
+
+    def update_api_key(self, api_key):
+        """Update the API key if needed."""
+        self.client = genai.Client(api_key=api_key)
+
+    def send_request(self, image, prompt_text, action):
+        self.api_in_progress = True
+        # No api_request_started.emit() here
+
+        self.thread = QThread()
+        self.worker = ApiWorker(self.client, prompt_text, action, image)
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.process)
+        self.worker.finished.connect(self._handle_response)
+        self.worker.error.connect(self._handle_error)
+        self.worker.finished.connect(self._cleanup_thread)
+        self.worker.error.connect(self._cleanup_thread)
+        self.thread.start()
+        return True
+
+    def _handle_response(self, response_text, action, image):
+        self.api_response_ready.emit(response_text, action, image)
+        self.api_in_progress = False
+        # No api_request_finished.emit() here
+
+    def _handle_error(self, error_message):
+        self.api_error.emit(error_message)
+        self.api_in_progress = False
+
+    def _cleanup_thread(self):
+        """Clean up the thread after the worker has finished."""
+        if self.thread and self.thread.isRunning():
+            self.thread.quit()
+            self.thread.wait()
+        self.thread = None
+        self.worker = None
+
+    def cleanup(self):
+        """Clean up resources when shutting down."""
+        if self.thread and self.thread.isRunning():
+            self.thread.quit()
+            self.thread.wait()
 
 
 class Im2LatexApp:
@@ -189,13 +253,18 @@ class Im2LatexApp:
         self.app.setQuitOnLastWindowClosed(False)
         self.screenshot_window = None
         self.history_window = None
+        self.app.aboutToQuit.connect(self.cleanup)
+
         self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
-        self.client = genai.Client(api_key=self.config_manager.get_api_key())
+        self.api_manager = ApiManager(self.config_manager.get_api_key())
+        self.api_manager.api_response_ready.connect(self.process_response)
+        self.api_manager.api_error.connect(self.handle_api_error)
+
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
             self.app, all_shortcuts, self.run_pipeline
         )
-        self.app.aboutToQuit.connect(self.cleanup)
+
         self.storage_manager = StorageManager()
 
         self.virtual_rect = QRect()
@@ -208,7 +277,7 @@ class Im2LatexApp:
             "height": self.virtual_rect.height(),
         }
 
-        self.tray_icon = QSystemTrayIcon(QIcon("assets/scissor.png"), self.app)
+        self.tray_icon = QSystemTrayIcon(QIcon(resource_path(ICON_NORMAL)), self.app)
         self.tray_icon.setToolTip("Im2Latex")
         menu = QMenu()
         menu.addAction(QAction("Open GUI", self.app, triggered=self.show_history))
@@ -219,41 +288,29 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
-        # Thread management
-        self.thread = None
-        self.worker = None
-        self.api_in_progress = False
-
     def cleanup(self):
-        """Clean up all resources before quitting."""
         self.shortcut_manager.cleanup()
-        if self.thread and self.thread.isRunning():
-            self.thread.quit()
-            self.thread.wait()
+        self.api_manager.cleanup()
 
     def run_pipeline(self, action):
-        def handle_screenshot(pil_image):
-            self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
-
-            try:
-                prompt_text = self.config_manager.get_prompt(action)
-                if not prompt_text:
-                    raise ValueError(f"No prompt defined for action: {action}")
-
-                print(f"Sending to API with action: {action}")
-
-                # Start API request in a separate thread
-                self.api_in_progress = True
-                self.send_to_api_async(pil_image, prompt_text, action)
-
-            except Exception as e:
-                print(f"Pipeline error: {e}")
-                self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
-                self.api_in_progress = False
-
-        if self.api_in_progress:
+        if self.api_manager.api_in_progress:
             print("API Request already in progress")
             return
+
+        # Check for prompt early, before proceeding to screenshot
+        prompt_text = self.config_manager.get_prompt(action)
+        if not prompt_text:
+            print(f"No prompt defined for action: {action}")
+            return  # Early exit before creating the screenshot window
+
+        def handle_screenshot(pil_image):
+            try:
+                print(f"Sending to API with action: {action}")
+                self.tray_icon.setIcon(QIcon(resource_path(ICON_LOADING)))
+                self.api_manager.send_request(pil_image, prompt_text, action)
+            except Exception as e:
+                print(f"Pipeline error: {e}")
+                self.tray_icon.setIcon(QIcon(resource_path(ICON_NORMAL)))
 
         self.screenshot_window = ScreenshotApp(
             handle_screenshot, self.monitor_geometry, self.virtual_rect
@@ -262,62 +319,26 @@ class Im2LatexApp:
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
 
-    def send_to_api_async(self, pil_image, prompt_text, action):
-        """Send the image to the API asynchronously using a worker thread."""
-
-        # Create a new thread and worker for this API request
-        self.thread = QThread()
-        self.worker = ApiWorker(self.client, prompt_text, action, pil_image)
-        # Move the worker to the thread
-        self.worker.moveToThread(self.thread)
-        # Connect signals and slots
-        self.thread.started.connect(self.worker.process)
-        self.worker.finished.connect(self.handle_api_response)
-        self.worker.error.connect(self.handle_api_error)
-        self.worker.finished.connect(self.cleanup_thread)
-        self.worker.error.connect(self.cleanup_thread)
-        self.thread.start()
-
-    def handle_api_response(self, response_text, action, pil_image):
-        """Handle the API response from the worker thread."""
-        try:
-            print(f"API response received: \n```\n{response_text}\n```")
-            self.process_response(response_text, action, pil_image)
-            print("Response processed and copied to clipboard\n")
-        except Exception as e:
-            print(f"Error processing API response: {e}")
-        finally:
-            self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
-            self.api_in_progress = False
-
-    def handle_api_error(self, error_message):
-        """Handle errors from the worker thread."""
-        print(f"API error while processing {self.worker.action}: {error_message}")
-        self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
-        self.api_in_progress = False
-
-    def cleanup_thread(self):
-        """Clean up the thread after the worker has finished."""
-        self.thread.quit()
-        self.thread.wait()
-        self.thread = None
-        self.worker = None
-
     def process_response(self, response_text, action, pil_image):
-        raw_response = response_text.strip()
-        if raw_response.startswith("```latex") or raw_response.startswith("```"):
-            raw_response = raw_response.split("\n", 1)[-1].rsplit("\n", 1)[0]
-        raw_response = raw_response.strip()
+        print(f"API response received: \n```\n{response_text}\n```")
 
         clipboard = self.app.clipboard()
-        clipboard.setText("\n".join(raw_response.splitlines()))
+        clipboard.setText("\n".join(response_text.splitlines()))
 
-        QSound.play(resource_path("assets/beep.wav"))
+        QSound.play(resource_path(SOUND_DONE))
 
         self.storage_manager.save_entry(
-            pil_image, self.config_manager.get_prompt(action), raw_response, action
+            pil_image, self.config_manager.get_prompt(action), response_text, action
         )
+        print("Response processed and copied to clipboard\n")
 
+        self.tray_icon.setIcon(QIcon(resource_path(ICON_NORMAL)))
+
+    def handle_api_error(self, error_message):
+        print(f"API error: {error_message}")
+        self.tray_icon.setIcon(QIcon(resource_path(ICON_NORMAL)))
+
+    # Rest of the methods remain unchanged
     def show_history(self):
         if self.history_window is None or not self.history_window.isVisible():
             self.history_window = HistoryWindow(self.storage_manager)
