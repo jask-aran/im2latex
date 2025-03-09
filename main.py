@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QAction,
     QMessageBox,
 )
-from PyQt5.QtCore import Qt, QRect
+from PyQt5.QtCore import Qt, QRect, QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtMultimedia import QSound
 from PyQt5.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QImage, QPen
 import mss
@@ -22,13 +22,13 @@ from shortcuts import ShortcutManager
 from storage import StorageManager
 from gui import HistoryWindow
 
-
-# Config settings
+ICON_NORMAL = "assets/scissor.png"
+ICON_LOADING = "assets/sand-clock.png"
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "api_key": "[MASKED_API_KEY]",
     "prompts": {
-        "math2latex": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image’s visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
+        "math2latex": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
         "text_extraction": "Extract all text from this image and return it as plain text.",
     },
     "shortcuts": {
@@ -157,6 +157,32 @@ class ScreenshotApp(QMainWindow):
             self.close()
 
 
+class ApiWorker(QObject):
+    finished = pyqtSignal(str, str, Image.Image)  # response_text, action, image
+    error = pyqtSignal(str)
+
+    def __init__(self, client, prompt_text, action, image):
+        super().__init__()
+        self.client = client
+        self.prompt_text = prompt_text
+        self.action = action
+        self.image = image
+
+    @pyqtSlot()
+    def process(self):
+        """Process the API request in a separate thread."""
+        try:
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash", contents=[self.prompt_text, self.image]
+            )
+            response_text = response.text
+            if not response_text:  # Check for empty or None response
+                raise ValueError("API returned an empty or invalid response")
+            self.finished.emit(response_text, self.action, self.image)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class Im2LatexApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
@@ -169,7 +195,7 @@ class Im2LatexApp:
         self.shortcut_manager = ShortcutManager(
             self.app, all_shortcuts, self.run_pipeline
         )
-        self.app.aboutToQuit.connect(self.shortcut_manager.cleanup)
+        self.app.aboutToQuit.connect(self.cleanup)
         self.storage_manager = StorageManager()
 
         self.virtual_rect = QRect()
@@ -193,6 +219,18 @@ class Im2LatexApp:
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
 
+        # Thread management
+        self.thread = None
+        self.worker = None
+        self.api_in_progress = False
+
+    def cleanup(self):
+        """Clean up all resources before quitting."""
+        self.shortcut_manager.cleanup()
+        if self.thread and self.thread.isRunning():
+            self.thread.quit()
+            self.thread.wait()
+
     def run_pipeline(self, action):
         def handle_screenshot(pil_image):
             self.tray_icon.setIcon(QIcon(resource_path("assets/sand-clock.png")))
@@ -204,16 +242,18 @@ class Im2LatexApp:
 
                 print(f"Sending to API with action: {action}")
 
-                response_text = self.send_to_api(pil_image, prompt_text)
-                print(f"API response received: \n```\n{response_text}\n```")
-
-                self.process_response(response_text, action, pil_image)
-                print("Response processed and copied to clipboard\n")
+                # Start API request in a separate thread
+                self.api_in_progress = True
+                self.send_to_api_async(pil_image, prompt_text, action)
 
             except Exception as e:
                 print(f"Pipeline error: {e}")
-            finally:
                 self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
+                self.api_in_progress = False
+
+        if self.api_in_progress:
+            print("API Request already in progress")
+            return
 
         self.screenshot_window = ScreenshotApp(
             handle_screenshot, self.monitor_geometry, self.virtual_rect
@@ -222,14 +262,46 @@ class Im2LatexApp:
         self.screenshot_window.activateWindow()
         self.screenshot_window.setFocus()
 
-    def send_to_api(self, pil_image, prompt_text):
-        response = self.client.models.generate_content(
-            model="gemini-2.0-flash", contents=[prompt_text, pil_image]
-        )
-        response_text = response.text
-        if not response_text:  # Check for empty or None response
-            raise ValueError("API returned an empty or invalid response")
-        return response_text
+    def send_to_api_async(self, pil_image, prompt_text, action):
+        """Send the image to the API asynchronously using a worker thread."""
+
+        # Create a new thread and worker for this API request
+        self.thread = QThread()
+        self.worker = ApiWorker(self.client, prompt_text, action, pil_image)
+        # Move the worker to the thread
+        self.worker.moveToThread(self.thread)
+        # Connect signals and slots
+        self.thread.started.connect(self.worker.process)
+        self.worker.finished.connect(self.handle_api_response)
+        self.worker.error.connect(self.handle_api_error)
+        self.worker.finished.connect(self.cleanup_thread)
+        self.worker.error.connect(self.cleanup_thread)
+        self.thread.start()
+
+    def handle_api_response(self, response_text, action, pil_image):
+        """Handle the API response from the worker thread."""
+        try:
+            print(f"API response received: \n```\n{response_text}\n```")
+            self.process_response(response_text, action, pil_image)
+            print("Response processed and copied to clipboard\n")
+        except Exception as e:
+            print(f"Error processing API response: {e}")
+        finally:
+            self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
+            self.api_in_progress = False
+
+    def handle_api_error(self, error_message):
+        """Handle errors from the worker thread."""
+        print(f"API error while processing {self.worker.action}: {error_message}")
+        self.tray_icon.setIcon(QIcon(resource_path("assets/scissor.png")))
+        self.api_in_progress = False
+
+    def cleanup_thread(self):
+        """Clean up the thread after the worker has finished."""
+        self.thread.quit()
+        self.thread.wait()
+        self.thread = None
+        self.worker = None
 
     def process_response(self, response_text, action, pil_image):
         raw_response = response_text.strip()
