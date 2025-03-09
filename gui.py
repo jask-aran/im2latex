@@ -1,4 +1,3 @@
-# gui.py
 import os
 import sys
 from datetime import datetime
@@ -52,6 +51,8 @@ class HistoryItem(QWidget):
 
         # Add timestamp and action as header
         header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(5)
 
         # Format timestamp
         try:
@@ -62,9 +63,11 @@ class HistoryItem(QWidget):
 
         timestamp_label = QLabel(formatted_time)
         timestamp_label.setStyleSheet("font-weight: bold; color: #333;")
+        timestamp_label.setFixedHeight(20)  # Limit height of timestamp
 
         action_label = QLabel(self.action)
         action_label.setStyleSheet("color: #666; font-style: italic;")
+        action_label.setFixedHeight(20)  # Limit height of action bubble
 
         header_layout.addWidget(timestamp_label)
         header_layout.addStretch()
@@ -85,8 +88,8 @@ class HistoryItem(QWidget):
         # Image display
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setMinimumSize(200, 100)
-        self.image_label.setMaximumSize(400, 300)
+        self.image_label.setMinimumSize(200, 150)  # Increased minimum height
+        self.image_label.setMaximumSize(400, 400)  # Increased maximum height
         self.image_label.setStyleSheet(
             "background-color: #f0f0f0; border: 1px solid #ddd;"
         )
@@ -96,7 +99,7 @@ class HistoryItem(QWidget):
             img = Image.open(self.image_path)
             # Calculate scaling while preserving aspect ratio
             img_width, img_height = img.size
-            max_width, max_height = 400, 300
+            max_width, max_height = 400, 400  # Increased maximum height
 
             # Calculate scaling factor
             width_ratio = max_width / img_width
@@ -136,7 +139,7 @@ class HistoryItem(QWidget):
             }
         """
         )
-        self.response_text.setMinimumHeight(100)
+        self.response_text.setMinimumHeight(150)  # Increased minimum height
 
         # Add image and response to the content layout
         content_layout.addWidget(self.image_label, 2)  # 2 parts for image
@@ -146,10 +149,12 @@ class HistoryItem(QWidget):
 
         # Add action buttons
         button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 5, 0, 0)
+        button_layout.setSpacing(10)
 
         # Copy button
-        copy_button = QPushButton("Copy to Clipboard")
-        copy_button.setStyleSheet(
+        self.copy_button = QPushButton("Copy to Clipboard")
+        self.copy_button.setStyleSheet(
             """
             QPushButton {
                 background-color: #5c85d6;
@@ -157,13 +162,15 @@ class HistoryItem(QWidget):
                 border: none;
                 padding: 5px 10px;
                 border-radius: 3px;
+                max-height: 30px;
             }
             QPushButton:hover {
                 background-color: #3a70d6;
             }
         """
         )
-        copy_button.clicked.connect(self.copy_to_clipboard)
+        self.copy_button.clicked.connect(self.copy_to_clipboard)
+        self.copy_button.setFixedHeight(30)  # Fixed height for buttons
 
         # Save image button
         save_image_button = QPushButton("Save Image")
@@ -175,6 +182,7 @@ class HistoryItem(QWidget):
                 border: none;
                 padding: 5px 10px;
                 border-radius: 3px;
+                max-height: 30px;
             }
             QPushButton:hover {
                 background-color: #4cae4c;
@@ -182,19 +190,40 @@ class HistoryItem(QWidget):
         """
         )
         save_image_button.clicked.connect(self.save_image)
+        save_image_button.setFixedHeight(30)  # Fixed height for buttons
 
-        button_layout.addWidget(copy_button)
+        button_layout.addWidget(self.copy_button)
         button_layout.addWidget(save_image_button)
         button_layout.addStretch()
 
         layout.addLayout(button_layout)
 
-        # Add some spacing at the bottom
-        layout.addSpacing(10)
-
     def copy_to_clipboard(self):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.raw_response)
+
+        # Visual feedback for copy action
+        original_text = self.copy_button.text()
+        original_style = self.copy_button.styleSheet()
+
+        # Change button appearance to indicate successful copy
+        self.copy_button.setText("Copied! ✓")
+        self.copy_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                border-radius: 3px;
+                max-height: 30px;
+            }
+            """
+        )
+
+        # Reset button after 1.5 seconds
+        QTimer.singleShot(1500, lambda: self.copy_button.setText(original_text))
+        QTimer.singleShot(1500, lambda: self.copy_button.setStyleSheet(original_style))
 
     def save_image(self):
         try:
@@ -222,7 +251,7 @@ class MainWindow(QMainWindow):
         self.setup_timer()
 
     def init_ui(self):
-        self.setWindowTitle("Im2Latex History")
+        self.setWindowTitle("Im2Latex")
         self.setGeometry(100, 100, 1200, 800)
         self.setWindowIcon(QIcon(resource_path("assets/scissor.png")))
 
