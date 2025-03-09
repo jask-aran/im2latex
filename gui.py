@@ -21,7 +21,7 @@ def resource_path(relative_path):
     return os.path.join(os.path.abspath("."), relative_path)
 
 
-class HistoryWindow(QMainWindow):
+class MainWindow(QMainWindow):
     def __init__(self, storage_manager):
         super().__init__()
         self.storage_manager = storage_manager
@@ -29,7 +29,7 @@ class HistoryWindow(QMainWindow):
         self.setup_timer()
 
     def init_ui(self):
-        self.setWindowTitle("Im2Latex History")
+        self.setWindowTitle("Im2Latex")
         self.setGeometry(100, 100, 1000, 600)
         self.setWindowIcon(QIcon(resource_path("assets/scissor.png")))
 

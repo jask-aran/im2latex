@@ -20,7 +20,7 @@ from pathlib import Path
 
 from shortcuts import ShortcutManager
 from storage import StorageManager
-from gui import HistoryWindow
+from gui import MainWindow
 
 ICON_NORMAL = "assets/scissor.png"
 ICON_LOADING = "assets/sand-clock.png"
@@ -252,7 +252,7 @@ class Im2LatexApp:
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         self.screenshot_window = None
-        self.history_window = None
+        self.main_gui = None
         self.app.aboutToQuit.connect(self.cleanup)
 
         self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
@@ -280,7 +280,7 @@ class Im2LatexApp:
         self.tray_icon = QSystemTrayIcon(QIcon(resource_path(ICON_NORMAL)), self.app)
         self.tray_icon.setToolTip("Im2Latex")
         menu = QMenu()
-        menu.addAction(QAction("Open GUI", self.app, triggered=self.show_history))
+        menu.addAction(QAction("Open GUI", self.app, triggered=self.show_gui))
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
         menu.addAction(QAction("Print History", self.app, triggered=self.print_history))
         menu.addAction(QAction("Reset History", self.app, triggered=self.reset_history))
@@ -339,13 +339,13 @@ class Im2LatexApp:
         self.tray_icon.setIcon(QIcon(resource_path(ICON_NORMAL)))
 
     # Rest of the methods remain unchanged
-    def show_history(self):
-        if self.history_window is None or not self.history_window.isVisible():
-            self.history_window = HistoryWindow(self.storage_manager)
-            self.history_window.show()
+    def show_gui(self):  # Changed from show_history to show_main
+        if self.main_gui is None or not self.main_gui.isVisible():
+            self.main_gui = MainWindow(self.storage_manager)
+            self.main_gui.show()
         else:
-            self.history_window.raise_()  # Bring to front if already open
-            self.history_window.activateWindow()
+            self.main_gui.raise_()
+            self.main_gui.activateWindow()
 
     def open_folder(self):
         os.startfile(os.getcwd())
