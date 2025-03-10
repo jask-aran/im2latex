@@ -43,7 +43,7 @@ DARK_THEME = {
     "timestamp_label": "font-weight: bold; color: #e0e0e0;",
     "action_label": "color: #b0b0b0; font-style: italic;",
     "copy_button": "background-color: #4a90e2; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-    "copy_button_hover": "background-color: #357abd;",
+    "copy_button_hover": "background-color: #357abd; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
     "save_button": "background-color: #2ecc71; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
     "save_button_hover": "background-color: #27ae60;",
     "line": "background-color: #333333;",
@@ -67,7 +67,7 @@ LIGHT_THEME = {
     "timestamp_label": "font-weight: bold; color: #333;",
     "action_label": "color: #666; font-style: italic;",
     "copy_button": "background-color: #5c85d6; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-    "copy_button_hover": "background-color: #3a70d6;",
+    "copy_button_hover": "background-color: #3a70d6; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
     "save_button": "background-color: #5cb85c; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
     "save_button_hover": "background-color: #4cae4c;",
     "line": "background-color: #ddd;",
@@ -291,15 +291,22 @@ class HistoryItem(QWidget):
 
     def copy_to_clipboard(self):
         QApplication.clipboard().setText(self.raw_response)
+
+        # Store the button text and create a new timer for the button effect
         original_text = self.copy_button.text()
-        original_style = self.copy_button.styleSheet()
         self.copy_button.setText("Copied!")
-        self.copy_button.setStyleSheet(
-            f"background-color: {THEMES[self.theme]['copy_button_hover']}; color: #ffffff; "
-            f"border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;"
-        )
-        QTimer.singleShot(1500, lambda: self.copy_button.setText(original_text))
-        QTimer.singleShot(1500, lambda: self.copy_button.setStyleSheet(original_style))
+        self.copy_button.setStyleSheet(THEMES[self.theme]["copy_button_hover"])
+
+        # Use a single timer to avoid multiple timers and C++ object deletion issues
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._reset_copy_button(original_text))
+        timer.start(1500)
+
+    def _reset_copy_button(self, original_text):
+        # This is safer as it avoids lambda capturing the button
+        self.copy_button.setText(original_text)
+        self.copy_button.setStyleSheet(THEMES[self.theme]["copy_button"])
 
     def save_image(self):
         try:

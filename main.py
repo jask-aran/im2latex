@@ -338,8 +338,7 @@ class Im2LatexApp:
         print(f"API error: {error_message}")
         self.tray_icon.setIcon(QIcon(resource_path(ICON_NORMAL)))
 
-    # Rest of the methods remain unchanged
-    def show_gui(self):  # Changed from show_history to show_main
+    def show_gui(self):
         if self.main_gui is None or not self.main_gui.isVisible():
             self.main_gui = MainWindow(self.storage_manager)
             self.main_gui.show()
