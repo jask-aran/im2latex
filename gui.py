@@ -1,11 +1,6 @@
 import os
 import sys
-
-# Use sys.argv approach for dark mode
-# sys.argv += ["-platform", "windows:darkmode=2"]
-
 from datetime import datetime
-from functools import partial
 from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -23,62 +18,66 @@ from PyQt5.QtGui import QIcon, QPixmap, QImage, QPainter, QColor
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QEvent
 from PIL import Image
 
-# Enable high DPI scaling before creating QApplication
+# Enable high DPI scaling
 QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 
 
 def resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller"""
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+    return (
+        os.path.join(sys._MEIPASS, relative_path)
+        if hasattr(sys, "_MEIPASS")
+        else os.path.join(os.path.abspath("."), relative_path)
+    )
 
 
 # Theme definitions
 THEMES = {
     "dark": {
-        "main_window": "background-color: #1e1e1e;",
-        "central_widget": "background-color: #1e1e1e;",
-        "header": "font-size: 22px; font-weight: bold; color: #e0e0e0; margin-bottom: 10px;",
-        "history_container": "background-color: #1e1e1e;",
-        "scroll_area": "border: none; background-color: #1e1e1e;",
-        "scroll_bar": "width: 0px; height: 0px; background: transparent;",
-        "frame": "background-color: #333333; border-radius: 6px; border: 1px solid #333333;",
-        "timestamp_label": "font-weight: bold; color: #e0e0e0;",
-        "action_label": "color: #b0b0b0; font-style: italic;",
-        "copy_button": "background-color: #4a90e2; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-        "copy_button_hover": "background-color: #357abd;",
-        "save_button": "background-color: #2ecc71; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-        "save_button_hover": "background-color: #27ae60;",
-        "line": "background-color: #333333;",
-        "image_label": "background-color: #333333; border: 1px solid #333333;",
-        "response_text": "background-color: #333333; border: 1px solid #333333; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; color: #e0e0e0;",
-        "no_history_label": "font-size: 16px; color: #b0b0b0; padding: 50px;",
-        "overlay_background": "#1e1e1e",
-        "overlay_fill": QColor(30, 30, 30, 150),  # Less opaque overlay
+        "bg_color": "#1e1e1e",
+        "frame_color": "#333333",
+        "text_color": "#e0e0e0",
+        "secondary_text": "#b0b0b0",
+        "copy_btn": {"bg": "#4a90e2", "hover": "#357abd"},
+        "save_btn": {"bg": "#2ecc71", "hover": "#27ae60"},
+        "overlay_fill": QColor(30, 30, 30, 150),
     },
     "light": {
-        "main_window": "background-color: #f5f5f5;",
-        "central_widget": "background-color: #f5f5f5;",
-        "header": "font-size: 22px; font-weight: bold; color: #333; margin-bottom: 10px;",
-        "history_container": "background-color: #f5f5f5;",
-        "scroll_area": "border: none; background-color: white;",
-        "scroll_bar": "width: 0px; height: 0px; background: transparent;",
-        "frame": "background-color: white; border-radius: 6px; border: 1px solid #ddd;",
-        "timestamp_label": "font-weight: bold; color: #333;",
-        "action_label": "color: #666; font-style: italic;",
-        "copy_button": "background-color: #5c85d6; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-        "copy_button_hover": "background-color: #3a70d6;",
-        "save_button": "background-color: #5cb85c; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-        "save_button_hover": "background-color: #4cae4c;",
-        "line": "background-color: #ddd;",
-        "image_label": "background-color: #f0f0f0; border: 1px solid #ddd;",
-        "response_text": "background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; color: #333;",
-        "no_history_label": "font-size: 16px; color: #888; padding: 50px;",
-        "overlay_background": "transparent",
-        "overlay_fill": QColor(0, 0, 0, 130),  # Less opaque overlay
+        "bg_color": "#f5f5f5",
+        "frame_color": "white",
+        "text_color": "#333",
+        "secondary_text": "#666",
+        "copy_btn": {"bg": "#5c85d6", "hover": "#3a70d6"},
+        "save_btn": {"bg": "#5cb85c", "hover": "#4cae4c"},
+        "overlay_fill": QColor(0, 0, 0, 130),
     },
 }
+
+# Generate complete styles from theme properties
+for theme_name, theme in THEMES.items():
+    is_dark = theme_name == "dark"
+    theme.update(
+        {
+            "main_window": f"background-color: {theme['bg_color']};",
+            "central_widget": f"background-color: {theme['bg_color']};",
+            "header": f"font-size: 22px; font-weight: bold; color: {theme['text_color']}; margin-bottom: 10px;",
+            "history_container": f"background-color: {theme['bg_color']};",
+            "scroll_area": f"border: none; background-color: {theme['bg_color'] if is_dark else 'white'};",
+            "scroll_bar": "width: 0px; height: 0px; background: transparent;",
+            "frame": f"background-color: {theme['frame_color']}; border-radius: 6px; border: 1px solid {theme['frame_color'] if is_dark else '#ddd'};",
+            "timestamp_label": f"font-weight: bold; color: {theme['text_color']};",
+            "action_label": f"color: {theme['secondary_text']}; font-style: italic;",
+            "copy_button": f"background-color: {theme['copy_btn']['bg']}; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
+            "copy_button_hover": f"background-color: {theme['copy_btn']['hover']};",
+            "save_button": f"background-color: {theme['save_btn']['bg']}; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
+            "save_button_hover": f"background-color: {theme['save_btn']['hover']};",
+            "line": f"background-color: {theme['frame_color'] if is_dark else '#ddd'};",
+            "image_label": f"background-color: {theme['frame_color'] if is_dark else '#f0f0f0'}; border: 1px solid {theme['frame_color'] if is_dark else '#ddd'};",
+            "response_text": f"background-color: {theme['frame_color'] if is_dark else '#f8f8f8'}; border: 1px solid {theme['frame_color'] if is_dark else '#ddd'}; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; color: {theme['text_color']};",
+            "no_history_label": f"font-size: 16px; color: {theme['secondary_text']}; padding: 50px;",
+            "overlay_background": theme["bg_color"] if is_dark else "transparent",
+        }
+    )
 
 
 class OverlayWidget(QWidget):
@@ -106,12 +105,14 @@ class OverlayWidget(QWidget):
         if not self.pixmap or self.pixmap.isNull():
             return
         parent_size = self.parent().size()
-        max_width = int(parent_size.width() * 0.8)
-        max_height = int(parent_size.height() * 0.8)
-        scaled_pixmap = self.pixmap.scaled(
-            max_width, max_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        max_width, max_height = int(parent_size.width() * 0.8), int(
+            parent_size.height() * 0.8
         )
-        self.image_label.setPixmap(scaled_pixmap)
+        self.image_label.setPixmap(
+            self.pixmap.scaled(
+                max_width, max_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+        )
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -156,13 +157,9 @@ class HistoryItem(QWidget):
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
-        self._setup_header(layout)
-        self._setup_content(layout)
 
-    def _setup_header(self, layout):
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(5)
-
+        # Header section
+        header = QHBoxLayout()
         try:
             dt = datetime.strptime(self.timestamp, "%Y%m%d_%H%M%S")
             formatted_time = dt.strftime("%b %d, %Y - %I:%M:%S %p")
@@ -182,29 +179,30 @@ class HistoryItem(QWidget):
         self.copy_button.clicked.connect(self.copy_to_clipboard)
         self.copy_button.setFixedSize(60, 20)
 
-        save_image_button = QPushButton("Save")
-        save_image_button.setStyleSheet(THEMES[self.theme]["save_button"])
-        save_image_button.clicked.connect(self.save_image)
-        save_image_button.setFixedSize(60, 20)
+        save_button = QPushButton("Save")
+        save_button.setStyleSheet(THEMES[self.theme]["save_button"])
+        save_button.clicked.connect(self.save_image)
+        save_button.setFixedSize(60, 20)
 
-        header_layout.addWidget(timestamp_label)
-        header_layout.addStretch()
-        header_layout.addWidget(action_label)
-        header_layout.addSpacing(10)
-        header_layout.addWidget(self.copy_button)
-        header_layout.addWidget(save_image_button)
+        header.addWidget(timestamp_label)
+        header.addStretch()
+        header.addWidget(action_label)
+        header.addSpacing(10)
+        header.addWidget(self.copy_button)
+        header.addWidget(save_button)
+        layout.addLayout(header)
 
-        layout.addLayout(header_layout)
+        # Divider
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setFrameShadow(QFrame.Sunken)
+        divider.setStyleSheet(THEMES[self.theme]["line"])
+        layout.addWidget(divider)
 
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet(THEMES[self.theme]["line"])
-        layout.addWidget(line)
+        # Content section
+        content = QHBoxLayout()
 
-    def _setup_content(self, layout):
-        content_layout = QHBoxLayout()
-
+        # Image
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMinimumSize(200, 200)
@@ -214,6 +212,7 @@ class HistoryItem(QWidget):
         self.image_label.mousePressEvent = self.show_image_overlay
         self._load_image()
 
+        # Text
         self.response_text = QTextEdit()
         self.response_text.setReadOnly(True)
         self.response_text.setText(self.raw_response)
@@ -222,21 +221,20 @@ class HistoryItem(QWidget):
         self.response_text.setStyleSheet(THEMES[self.theme]["response_text"])
         self.response_text.setMaximumHeight(200)
 
-        content_layout.addWidget(self.image_label, 2)
-        content_layout.addWidget(self.response_text, 3)
-        layout.addLayout(content_layout)
+        content.addWidget(self.image_label, 2)
+        content.addWidget(self.response_text, 3)
+        layout.addLayout(content)
         layout.addStretch()
 
     def _load_image(self):
         try:
             img = Image.open(self.image_path)
             img_width, img_height = img.size
-            max_width, max_height = 400, 200
-            scale_factor = min(max_width / img_width, max_height / img_height)
-            new_width = int(img_width * scale_factor)
-            new_height = int(img_height * scale_factor)
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            scale_factor = min(400 / img_width, 200 / img_height)
+            new_size = (int(img_width * scale_factor), int(img_height * scale_factor))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
 
+            # Convert to QImage based on mode
             if img.mode == "RGB":
                 qimage = QImage(
                     img.tobytes(),
@@ -261,14 +259,14 @@ class HistoryItem(QWidget):
 
     def show_image_overlay(self, event):
         if self.pixmap:
-            overlay = OverlayWidget(self.pixmap, self.window(), self.theme)
-            overlay.show()
+            OverlayWidget(self.pixmap, self.window(), self.theme).show()
 
     def copy_to_clipboard(self):
-        clipboard = QApplication.clipboard()
-        clipboard.setText(self.raw_response)
-        original_text = self.copy_button.text()
-        original_style = self.copy_button.styleSheet()
+        QApplication.clipboard().setText(self.raw_response)
+        original_text, original_style = (
+            self.copy_button.text(),
+            self.copy_button.styleSheet(),
+        )
         self.copy_button.setText("Copied!")
         self.copy_button.setStyleSheet(
             f"background-color: {THEMES[self.theme]['copy_button_hover']}; color: #ffffff; "
@@ -286,8 +284,7 @@ class HistoryItem(QWidget):
                 "Images (*.png *.jpg)",
             )
             if filename:
-                img = Image.open(self.image_path)
-                img.save(filename)
+                Image.open(self.image_path).save(filename)
         except Exception as e:
             print(f"Error saving image: {e}")
 
@@ -297,17 +294,15 @@ class HistoryItem(QWidget):
         self.response_text.setStyleSheet(THEMES[theme]["response_text"])
         self.copy_button.setStyleSheet(THEMES[theme]["copy_button"])
 
-        # Find frame and labels
         for child in self.findChildren(QFrame):
             child.setStyleSheet(THEMES[theme]["line"])
 
-        # Update labels
         for child in self.findChildren(QLabel):
             if child != self.image_label:
-                if "timestamp" in child.text():
-                    child.setStyleSheet(THEMES[theme]["timestamp_label"])
-                else:
-                    child.setStyleSheet(THEMES[theme]["action_label"])
+                style_key = (
+                    "timestamp_label" if "timestamp" in child.text() else "action_label"
+                )
+                child.setStyleSheet(THEMES[theme][style_key])
 
 
 class MainWindow(QMainWindow):
@@ -319,53 +314,46 @@ class MainWindow(QMainWindow):
         self.entries = []
         self.current_theme = "dark"
         self.init_ui()
-        self.set_dark_titlebar()  # Add this line
+        self.set_dark_titlebar()
         self.setup_timer()
 
     def init_ui(self):
+        # Window setup
         self.setWindowTitle("Im2Latex")
         self.setGeometry(100, 100, 1200, 800)
         self.setMaximumWidth(1500)
-
-        # Set window icon - try both ico and png formats
-        icon_path = resource_path("assets/scissor.ico")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-            # Force Windows to use the icon for taskbar
-            import ctypes
-
-            app_id = "im2latex.app"  # Arbitrary string
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
-        else:
-            icon_path = resource_path("assets/scissor.png")
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
-
+        self.set_window_icon()
         self.setStyleSheet(THEMES[self.current_theme]["main_window"])
 
+        # Central widget
         central_widget = QWidget()
         central_widget.setStyleSheet(THEMES[self.current_theme]["central_widget"])
         self.setCentralWidget(central_widget)
+
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(50, 15, 50, 15)
 
-        # Header with theme toggle
+        # Header
         header_layout = QHBoxLayout()
         header = QLabel("Im2Latex History")
         header.setStyleSheet(THEMES[self.current_theme]["header"])
+
         self.theme_button = QPushButton(
             "Switch to Light" if self.current_theme == "dark" else "Switch to Dark"
         )
         self.theme_button.setStyleSheet(
-            "QPushButton { background-color: #4a90e2; color: #ffffff; border: none; padding: 5px 10px; border-radius: 3px; }"
+            "QPushButton { background-color: #4a90e2; color: #ffffff; border: none; "
+            "padding: 5px 10px; border-radius: 3px; }"
             "QPushButton:hover { background-color: #357abd; }"
         )
         self.theme_button.clicked.connect(self.toggle_theme)
+
         header_layout.addWidget(header)
         header_layout.addStretch()
         header_layout.addWidget(self.theme_button)
         main_layout.addLayout(header_layout)
 
+        # History container
         self.history_container = QWidget()
         self.history_container.setStyleSheet(
             THEMES[self.current_theme]["history_container"]
@@ -376,10 +364,8 @@ class MainWindow(QMainWindow):
 
         scroll_area = QScrollArea()
         scroll_area.setStyleSheet(
-            f"""
-            QScrollArea {{ {THEMES[self.current_theme]["scroll_area"]} }}
-            QScrollBar:vertical, QScrollBar:horizontal {{ {THEMES[self.current_theme]["scroll_bar"]} }}
-            """
+            f"QScrollArea {{ {THEMES[self.current_theme]['scroll_area']} }}"
+            f"QScrollBar:vertical, QScrollBar:horizontal {{ {THEMES[self.current_theme]['scroll_bar']} }}"
         )
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(self.history_container)
@@ -387,24 +373,32 @@ class MainWindow(QMainWindow):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         main_layout.addWidget(scroll_area)
 
-        self.load_history()
+        # Load data
         self.refresh_signal.connect(self.load_history)
+        self.load_history()
+
+    def set_window_icon(self):
+        for icon_ext in ["ico", "png"]:
+            icon_path = resource_path(f"assets/scissor.{icon_ext}")
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+                if icon_ext == "ico" and sys.platform == "win32":
+                    import ctypes
+
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                        "im2latex.app"
+                    )
+                break
 
     def set_dark_titlebar(self):
-        # Only apply dark title bar on Windows
         if sys.platform == "win32":
             try:
                 from ctypes import windll, c_int, byref, sizeof
 
-                # Windows 10 1809 or later
-                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
                 hwnd = int(self.winId())
                 darkMode = c_int(1)
                 windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd,
-                    DWMWA_USE_IMMERSIVE_DARK_MODE,
-                    byref(darkMode),
-                    sizeof(darkMode),
+                    hwnd, 20, byref(darkMode), sizeof(darkMode)
                 )
             except Exception as e:
                 print(f"Failed to set dark titlebar: {e}")
@@ -427,26 +421,28 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.deleteLater()
 
+        # Get entries
         self.entries = self.storage_manager.get_all_entries()
+
+        # Show empty state or history items
         if not self.entries:
-            no_history_label = QLabel(
-                "No history entries found. Take some screenshots!"
-            )
-            no_history_label.setAlignment(Qt.AlignCenter)
-            no_history_label.setStyleSheet(
-                THEMES[self.current_theme]["no_history_label"]
-            )
-            self.history_layout.addWidget(no_history_label)
+            no_history = QLabel("No history entries found. Take some screenshots!")
+            no_history.setAlignment(Qt.AlignCenter)
+            no_history.setStyleSheet(THEMES[self.current_theme]["no_history_label"])
+            self.history_layout.addWidget(no_history)
             return
 
+        # Add history items
         for entry in self.entries:
-            history_item = HistoryItem(entry, theme=self.current_theme)
+            # Create wrapped history item
             item_frame = QFrame()
             item_frame.setFrameShape(QFrame.StyledPanel)
             item_frame.setStyleSheet(THEMES[self.current_theme]["frame"])
+
             item_layout = QVBoxLayout(item_frame)
             item_layout.setContentsMargins(10, 10, 10, 10)
-            item_layout.addWidget(history_item)
+            item_layout.addWidget(HistoryItem(entry, theme=self.current_theme))
+
             self.history_layout.addWidget(item_frame)
 
         self.history_layout.addStretch()
@@ -456,30 +452,32 @@ class MainWindow(QMainWindow):
         self.theme_button.setText(
             "Switch to Light" if self.current_theme == "dark" else "Switch to Dark"
         )
+
+        # Update styles
         self.setStyleSheet(THEMES[self.current_theme]["main_window"])
         self.centralWidget().setStyleSheet(THEMES[self.current_theme]["central_widget"])
 
-        # Update header style
-        for header in self.findChildren(QLabel):
-            if header.text() == "Im2Latex History":
-                header.setStyleSheet(THEMES[self.current_theme]["header"])
-                break
+        # Update header
+        header = next(
+            (h for h in self.findChildren(QLabel) if h.text() == "Im2Latex History"),
+            None,
+        )
+        if header:
+            header.setStyleSheet(THEMES[self.current_theme]["header"])
 
+        # Update container and scroll
         self.history_container.setStyleSheet(
             THEMES[self.current_theme]["history_container"]
         )
-
-        # Update scrollarea style
         scroll_area = self.findChild(QScrollArea)
         if scroll_area:
             scroll_area.setStyleSheet(
-                f"""
-                QScrollArea {{ {THEMES[self.current_theme]["scroll_area"]} }}
-                QScrollBar:vertical, QScrollBar:horizontal {{ {THEMES[self.current_theme]["scroll_bar"]} }}
-                """
+                f"QScrollArea {{ {THEMES[self.current_theme]['scroll_area']} }}"
+                f"QScrollBar:vertical, QScrollBar:horizontal {{ {THEMES[self.current_theme]['scroll_bar']} }}"
             )
 
-        self.load_history()  # Reload history to apply new theme to items
+        # Reload to apply theme
+        self.load_history()
 
 
 if __name__ == "__main__":
