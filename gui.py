@@ -2,7 +2,7 @@ import os
 import sys
 
 # Use sys.argv approach for dark mode
-sys.argv += ["-platform", "windows:darkmode=2"]
+# sys.argv += ["-platform", "windows:darkmode=2"]
 
 from datetime import datetime
 from functools import partial
@@ -319,6 +319,7 @@ class MainWindow(QMainWindow):
         self.entries = []
         self.current_theme = "dark"
         self.init_ui()
+        self.set_dark_titlebar()  # Add this line
         self.setup_timer()
 
     def init_ui(self):
@@ -388,6 +389,25 @@ class MainWindow(QMainWindow):
 
         self.load_history()
         self.refresh_signal.connect(self.load_history)
+
+    def set_dark_titlebar(self):
+        # Only apply dark title bar on Windows
+        if sys.platform == "win32":
+            try:
+                from ctypes import windll, c_int, byref, sizeof
+
+                # Windows 10 1809 or later
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                hwnd = int(self.winId())
+                darkMode = c_int(1)
+                windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    byref(darkMode),
+                    sizeof(darkMode),
+                )
+            except Exception as e:
+                print(f"Failed to set dark titlebar: {e}")
 
     def setup_timer(self):
         self.timer = QTimer(self)
