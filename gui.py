@@ -31,60 +31,64 @@ def resource_path(relative_path):
     )
 
 
-# Theme definitions
-THEMES = {
-    "dark": {
-        "bg_color": "#1e1e1e",
-        "frame_color": "#333333",
-        "text_color": "#e0e0e0",
-        "secondary_text": "#b0b0b0",
-        "copy_btn": {"bg": "#4a90e2", "hover": "#357abd"},
-        "save_btn": {"bg": "#2ecc71", "hover": "#27ae60"},
-        "overlay_fill": QColor(30, 30, 30, 150),
-    },
-    "light": {
-        "bg_color": "#f5f5f5",
-        "frame_color": "white",
-        "text_color": "#333",
-        "secondary_text": "#666",
-        "copy_btn": {"bg": "#5c85d6", "hover": "#3a70d6"},
-        "save_btn": {"bg": "#5cb85c", "hover": "#4cae4c"},
-        "overlay_fill": QColor(0, 0, 0, 130),
-    },
+# Simple theme definitions - no generator needed for just two themes
+DARK_THEME = {
+    "main_window": "background-color: #1e1e1e;",
+    "central_widget": "background-color: #1e1e1e;",
+    "header": "font-size: 22px; font-weight: bold; color: #e0e0e0; margin-bottom: 10px;",
+    "history_container": "background-color: #1e1e1e;",
+    "scroll_area": "border: none; background-color: #1e1e1e;",
+    "scroll_bar": "width: 0px; height: 0px; background: transparent;",
+    "frame": "background-color: #333333; border-radius: 6px; border: 1px solid #333333;",
+    "timestamp_label": "font-weight: bold; color: #e0e0e0;",
+    "action_label": "color: #b0b0b0; font-style: italic;",
+    "copy_button": "background-color: #4a90e2; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
+    "copy_button_hover": "background-color: #357abd;",
+    "save_button": "background-color: #2ecc71; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
+    "save_button_hover": "background-color: #27ae60;",
+    "line": "background-color: #333333;",
+    "image_label": "background-color: #333333; border: 1px solid #333333;",
+    "response_text": "background-color: #333333; border: 1px solid #333333; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; color: #e0e0e0;",
+    "no_history_label": "font-size: 16px; color: #b0b0b0; padding: 50px;",
+    "overlay_background": "#1e1e1e",
+    "overlay_fill": QColor(30, 30, 30, 150),
+    "theme_button": "background-color: #555555; color: #ffffff; border: none; padding: 5px 10px; border-radius: 3px;",
+    "theme_button_hover": "background-color: #666666;",
 }
 
-# Generate complete styles from theme properties
-for theme_name, theme in THEMES.items():
-    is_dark = theme_name == "dark"
-    theme.update(
-        {
-            "main_window": f"background-color: {theme['bg_color']};",
-            "central_widget": f"background-color: {theme['bg_color']};",
-            "header": f"font-size: 22px; font-weight: bold; color: {theme['text_color']}; margin-bottom: 10px;",
-            "history_container": f"background-color: {theme['bg_color']};",
-            "scroll_area": f"border: none; background-color: {theme['bg_color'] if is_dark else 'white'};",
-            "scroll_bar": "width: 0px; height: 0px; background: transparent;",
-            "frame": f"background-color: {theme['frame_color']}; border-radius: 6px; border: 1px solid {theme['frame_color'] if is_dark else '#ddd'};",
-            "timestamp_label": f"font-weight: bold; color: {theme['text_color']};",
-            "action_label": f"color: {theme['secondary_text']}; font-style: italic;",
-            "copy_button": f"background-color: {theme['copy_btn']['bg']}; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-            "copy_button_hover": f"background-color: {theme['copy_btn']['hover']};",
-            "save_button": f"background-color: {theme['save_btn']['bg']}; color: #ffffff; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
-            "save_button_hover": f"background-color: {theme['save_btn']['hover']};",
-            "line": f"background-color: {theme['frame_color'] if is_dark else '#ddd'};",
-            "image_label": f"background-color: {theme['frame_color'] if is_dark else '#f0f0f0'}; border: 1px solid {theme['frame_color'] if is_dark else '#ddd'};",
-            "response_text": f"background-color: {theme['frame_color'] if is_dark else '#f8f8f8'}; border: 1px solid {theme['frame_color'] if is_dark else '#ddd'}; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; color: {theme['text_color']};",
-            "no_history_label": f"font-size: 16px; color: {theme['secondary_text']}; padding: 50px;",
-            "overlay_background": theme["bg_color"] if is_dark else "transparent",
-        }
-    )
+LIGHT_THEME = {
+    "main_window": "background-color: #f5f5f5;",
+    "central_widget": "background-color: #f5f5f5;",
+    "header": "font-size: 22px; font-weight: bold; color: #333; margin-bottom: 10px;",
+    "history_container": "background-color: #f5f5f5;",
+    "scroll_area": "border: none; background-color: white;",
+    "scroll_bar": "width: 0px; height: 0px; background: transparent;",
+    "frame": "background-color: white; border-radius: 6px; border: 1px solid #ddd;",
+    "timestamp_label": "font-weight: bold; color: #333;",
+    "action_label": "color: #666; font-style: italic;",
+    "copy_button": "background-color: #5c85d6; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
+    "copy_button_hover": "background-color: #3a70d6;",
+    "save_button": "background-color: #5cb85c; color: white; border: none; padding: 2px 5px; border-radius: 3px; font-size: 12px;",
+    "save_button_hover": "background-color: #4cae4c;",
+    "line": "background-color: #ddd;",
+    "image_label": "background-color: #f0f0f0; border: 1px solid #ddd;",
+    "response_text": "background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; color: #333;",
+    "no_history_label": "font-size: 16px; color: #888; padding: 50px;",
+    "overlay_background": "transparent",
+    "overlay_fill": QColor(0, 0, 0, 130),
+    "theme_button": "background-color: #aaaaaa; color: #ffffff; border: none; padding: 5px 10px; border-radius: 3px;",
+    "theme_button_hover": "background-color: #999999;",
+}
+
+THEMES = {"dark": DARK_THEME, "light": LIGHT_THEME}
 
 
 class OverlayWidget(QWidget):
-    def __init__(self, pixmap, parent=None, theme="dark"):
+    def __init__(self, image_path, parent=None, theme="dark"):
         super().__init__(parent)
-        self.pixmap = pixmap
+        self.image_path = image_path
         self.theme = theme
+        self.pixmap = None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setStyleSheet(f"background-color: {THEMES[theme]['overlay_background']};")
         self.init_ui()
@@ -96,23 +100,49 @@ class OverlayWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(Qt.AlignCenter)
+
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.update_pixmap()
+        self._load_image()
         layout.addWidget(self.image_label)
 
-    def update_pixmap(self):
-        if not self.pixmap or self.pixmap.isNull():
-            return
-        parent_size = self.parent().size()
-        max_width, max_height = int(parent_size.width() * 0.8), int(
-            parent_size.height() * 0.8
-        )
-        self.image_label.setPixmap(
-            self.pixmap.scaled(
-                max_width, max_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-        )
+    def _load_image(self):
+        try:
+            # Load image at full resolution for the overlay
+            img = Image.open(self.image_path)
+            parent_size = self.parent().size()
+
+            # Scale based on parent window size, but preserve resolution
+            max_width = int(parent_size.width() * 0.7)
+            max_height = int(parent_size.height() * 0.7)
+
+            # Only resize if image is larger than max dimensions
+            if img.width > max_width or img.height > max_height:
+                scale = min(max_width / img.width, max_height / img.height)
+                new_size = (int(img.width * scale), int(img.height * scale))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            if img.mode == "RGB":
+                qimage = QImage(
+                    img.tobytes(),
+                    img.width,
+                    img.height,
+                    img.width * 3,
+                    QImage.Format_RGB888,
+                )
+            else:
+                qimage = QImage(
+                    img.tobytes(),
+                    img.width,
+                    img.height,
+                    img.width * 4,
+                    QImage.Format_RGBA8888,
+                )
+
+            self.pixmap = QPixmap.fromImage(qimage)
+            self.image_label.setPixmap(self.pixmap)
+        except Exception as e:
+            self.image_label.setText(f"Error loading image: {e}")
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -121,7 +151,7 @@ class OverlayWidget(QWidget):
     def eventFilter(self, obj, event):
         if obj == self.parent() and event.type() == QEvent.Resize:
             self.setGeometry(self.parent().rect())
-            self.update_pixmap()
+            self._load_image()
         return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event):
@@ -130,11 +160,6 @@ class OverlayWidget(QWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             self.hide()
-
-    def set_theme(self, theme):
-        self.theme = theme
-        self.setStyleSheet(f"background-color: {THEMES[theme]['overlay_background']};")
-        self.update()
 
 
 class HistoryItem(QWidget):
@@ -160,6 +185,8 @@ class HistoryItem(QWidget):
 
         # Header section
         header = QHBoxLayout()
+
+        # Format timestamp
         try:
             dt = datetime.strptime(self.timestamp, "%Y%m%d_%H%M%S")
             formatted_time = dt.strftime("%b %d, %Y - %I:%M:%S %p")
@@ -228,13 +255,13 @@ class HistoryItem(QWidget):
 
     def _load_image(self):
         try:
+            # Load a thumbnail for the history view
             img = Image.open(self.image_path)
             img_width, img_height = img.size
             scale_factor = min(400 / img_width, 200 / img_height)
             new_size = (int(img_width * scale_factor), int(img_height * scale_factor))
             img = img.resize(new_size, Image.Resampling.LANCZOS)
 
-            # Convert to QImage based on mode
             if img.mode == "RGB":
                 qimage = QImage(
                     img.tobytes(),
@@ -258,15 +285,14 @@ class HistoryItem(QWidget):
             self.image_label.setText(f"Error loading image: {e}")
 
     def show_image_overlay(self, event):
-        if self.pixmap:
-            OverlayWidget(self.pixmap, self.window(), self.theme).show()
+        # Pass the image path instead of the pixmap to show full resolution
+        overlay = OverlayWidget(self.image_path, self.window(), self.theme)
+        overlay.show()
 
     def copy_to_clipboard(self):
         QApplication.clipboard().setText(self.raw_response)
-        original_text, original_style = (
-            self.copy_button.text(),
-            self.copy_button.styleSheet(),
-        )
+        original_text = self.copy_button.text()
+        original_style = self.copy_button.styleSheet()
         self.copy_button.setText("Copied!")
         self.copy_button.setStyleSheet(
             f"background-color: {THEMES[self.theme]['copy_button_hover']}; color: #ffffff; "
@@ -299,10 +325,10 @@ class HistoryItem(QWidget):
 
         for child in self.findChildren(QLabel):
             if child != self.image_label:
-                style_key = (
-                    "timestamp_label" if "timestamp" in child.text() else "action_label"
-                )
-                child.setStyleSheet(THEMES[theme][style_key])
+                if "timestamp" in child.text():
+                    child.setStyleSheet(THEMES[theme]["timestamp_label"])
+                else:
+                    child.setStyleSheet(THEMES[theme]["action_label"])
 
 
 class MainWindow(QMainWindow):
@@ -341,11 +367,7 @@ class MainWindow(QMainWindow):
         self.theme_button = QPushButton(
             "Switch to Light" if self.current_theme == "dark" else "Switch to Dark"
         )
-        self.theme_button.setStyleSheet(
-            "QPushButton { background-color: #4a90e2; color: #ffffff; border: none; "
-            "padding: 5px 10px; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #357abd; }"
-        )
+        self.theme_button.setStyleSheet(THEMES[self.current_theme]["theme_button"])
         self.theme_button.clicked.connect(self.toggle_theme)
 
         header_layout.addWidget(header)
@@ -456,6 +478,7 @@ class MainWindow(QMainWindow):
         # Update styles
         self.setStyleSheet(THEMES[self.current_theme]["main_window"])
         self.centralWidget().setStyleSheet(THEMES[self.current_theme]["central_widget"])
+        self.theme_button.setStyleSheet(THEMES[self.current_theme]["theme_button"])
 
         # Update header
         header = next(
