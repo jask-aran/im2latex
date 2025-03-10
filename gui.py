@@ -310,14 +310,20 @@ class HistoryItem(QWidget):
 
     def save_image(self):
         try:
-            filename, _ = QFileDialog.getSaveFileName(
+            # Store the image path locally to avoid accessing self during dialog
+            image_path = self.image_path
+
+            # Create the dialog before any operations that might affect threading
+            filename, filter_type = QFileDialog.getSaveFileName(
                 self,
                 "Save Image",
                 f"image_{self.id}_{self.timestamp}.png",
                 "Images (*.png *.jpg)",
             )
+
+            # Only proceed with the save if a filename was selected
             if filename:
-                Image.open(self.image_path).save(filename)
+                Image.open(image_path).save(filename)
         except Exception as e:
             print(f"Error saving image: {e}")
 

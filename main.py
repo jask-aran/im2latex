@@ -279,6 +279,11 @@ class Im2LatexApp:
 
         self.tray_icon = QSystemTrayIcon(QIcon(resource_path(ICON_NORMAL)), self.app)
         self.tray_icon.setToolTip("Im2Latex")
+        self.tray_icon.activated.connect(
+            lambda reason: (
+                self.show_gui() if reason != QSystemTrayIcon.Context else None
+            )
+        )
         menu = QMenu()
         menu.addAction(QAction("Open GUI", self.app, triggered=self.show_gui))
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
