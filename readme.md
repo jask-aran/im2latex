@@ -68,7 +68,14 @@ To make Im2Latex act like an installed application (accessible via Windows Searc
 
 **Note:** If you move the repository folder after running `install.bat`, the shortcut will break unless you rerun the script to update it.
 
----
+## GUI
+1. **View History**: See all your previous conversions in reverse chronological order.
+2. **Copy LaTeX**: Copy previously generated LaTeX code/ text with a single click.
+3. **Save Images**: Save the original screenshots to your preferred location.
+4. **View Full-size Images**: Click on any thumbnail to see the full-size image.
+5. **Toggle Theme**: Switch between dark and light modes with the theme button.
+
+![GUI](.github/gui.png)
 
 ## Customizing Shortcuts
 
@@ -77,18 +84,12 @@ Modify the default shortcut (`Win+Shift+Z`) by editing `config.json`:
 2. Update the `shortcuts` section:
    ```json
    "shortcuts": {
-     "windows": [
-       {"shortcut_str": "ctrl+alt+m", "action": "trigger_screenshot"}
-     ]
-   }
+        "windows": [
+            {"shortcut_str": "ctrl+shift+z", "action": "math2latex"},
+            {"shortcut_str": "ctrl+shift+x", "action": "text_extraction"},
+        ]
+    },
    ```
 3. Supported modifiers: `win`, `ctrl`, `alt`, `shift`  
    Supported keys: `a-z`, `0-9`
 
-
-#### Pyinstaller
-- Create a virtual environment: `python -m venv .venv`
-- Activate it: `.venv\Scripts\activate.bat`
-- Install dependencies: `pip install -r requirements.txt`
-- Build the executable: `pyinstaller --onefile --windowed --add-data "assets;assets" --hidden-import=google.generativeai --hidden-import=tzdata --hidden-import=sip --icon=assets/scissor.png --name=Im2Latex main.py`
-- Find the `.exe` in the `dist` folder.
