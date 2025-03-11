@@ -11,15 +11,14 @@
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/username/im2latex/issues)
 
 
-Capture a screenshot of mathematical expressions and instantly convert it to LaTeX code, copied to your clipboard, using Google Gemini Flash 2.0 or another LLM API.
+Capture a screenshot of mathematical expressions and instantly convert it to LaTeX code, copied to your clipboard, using Google Gemini Flash 2.0. Get an API key with free Flash usage at https://aistudio.google.com/app/apikey
 
 ![Demo](.github/new_demo.gif)
 
 ## Features
 
 - **Instant Conversion**: Capture any math expression and get LaTeX code on your clipboard.
-- **System Tray**: Runs quietly in the background.
-- **Custom Shortcuts**: Configurable via `config.json` (Windows default: `Win+Shift+Z`).
+- **Custom Shortcuts**: Configurable commands and shortctus via `config.json` (Windows default: `Win+Alt+Z`).
 - **Sound Feedback**: Audio cue when conversion is done and LaTeX is ready to paste.
 - **Platform Goals**: Windows-ready now; Linux/macOS support coming soon.
 
