@@ -27,19 +27,22 @@ ICON_LOADING = "assets/sand-clock.png"
 SOUND_DONE = "assets/beep.wav"
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
-    "api_key": "[MASKED_API_KEY]",
+    "api_key": "YOUR_API_KEY_HERE",
     "prompts": {
-        "math2latex": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image's visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
+        "math2latex": "Convert the mathematical content in this image to raw LaTeX math code. Use \\text{} for plain text within equations. For one equation, return only its code. For multiple equations, use \\begin{array}{l}...\\end{array} with \\\\ between equations, matching the image’s visual structure. Never use standalone environments like equation or align, and never wrap output in code block markers (e.g., ```). Return NA if no math is present.",
         "text_extraction": "Extract all text from this image and return it as plain text.",
+        "table": "Convert the information in the image to a latex formatted table. Use a hbar and bolding for the header row where appropriate, and only return the necessary lines for posting into an existing document. Add an empty caption to add a table number but do not fill it unless there is a title visible in the image.",
+        "chem2smiles": "Convert the chemical structure or formula in this image to SMILES notation. Pay really close attention to the chemical structure to ensure you have matched it perfectly. Return 'NA' if no chemical structure or formula is present or recognizable. Do not return anything but the SMILES code itself.",
     },
     "shortcuts": {
         "windows": [
-            {"shortcut_str": "ctrl+shift+z", "action": "math2latex"},
-            {"shortcut_str": "ctrl+shift+x", "action": "text_extraction"},
+            {"shortcut_str": "ctrl+alt+z", "action": "math2latex"},
+            {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
+            {"shortcut_str": "ctrl+alt+c", "action": "table"},
+            {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"},
         ]
     },
 }
-
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 
 
