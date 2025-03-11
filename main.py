@@ -116,7 +116,6 @@ class ScreenshotApp(QMainWindow):
         self.setWindowOpacity(1.0)
         self.origin = None
 
-        # Define CustomRubberBand as an inner class
         class CustomRubberBand(QRubberBand):
             def paintEvent(self, event):
                 painter = QPainter(self)
@@ -213,7 +212,6 @@ class ApiManager(QObject):
 
     def send_request(self, image, prompt_text, action):
         self.api_in_progress = True
-        # No api_request_started.emit() here
 
         self.thread = QThread()
         self.worker = ApiWorker(self.client, prompt_text, action, image)
@@ -229,7 +227,6 @@ class ApiManager(QObject):
     def _handle_response(self, response_text, action, image):
         self.api_response_ready.emit(response_text, action, image)
         self.api_in_progress = False
-        # No api_request_finished.emit() here
 
     def _handle_error(self, error_message):
         self.api_error.emit(error_message)
