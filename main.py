@@ -1,6 +1,8 @@
 import sys
 import os
 import json
+import time
+
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -312,6 +314,7 @@ class Im2LatexApp:
             try:
                 print(f"Sending to API with action: {action}")
                 self.tray_icon.setIcon(QIcon(resource_path(ICON_LOADING)))
+                self.api_start_time = time.time()
                 self.api_manager.send_request(pil_image, prompt_text, action)
             except Exception as e:
                 print(f"Pipeline error: {e}")
@@ -325,7 +328,14 @@ class Im2LatexApp:
         self.screenshot_window.setFocus()
 
     def process_response(self, response_text, action, pil_image):
-        print(f"API response received: \n```\n{response_text}\n```")
+        # print(f"API response received: \n```\n{response_text}\n```")
+        end_time = time.time()
+        elapsed_time = (
+            end_time - self.api_start_time if hasattr(self, "api_start_time") else 0
+        )
+        print(
+            f"API response received in {elapsed_time:.2f} seconds: \n```\n{response_text}\n```"
+        )
 
         clipboard = self.app.clipboard()
         clipboard.setText("\n".join(response_text.splitlines()))
