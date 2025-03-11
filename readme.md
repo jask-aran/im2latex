@@ -11,16 +11,23 @@
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/username/im2latex/issues)
 
 
-Capture a screenshot of mathematical expressions and instantly convert it to LaTeX code, copied to your clipboard, using Google Gemini Flash 2.0. Get an API key with free Flash usage at https://aistudio.google.com/app/apikey
+Capture a screenshot of mathematical expressions and instantly convert it to LaTeX code, copied to your clipboard, using Google Gemini Flash 2.0. Get an API key with free Flash usage at https://aistudio.google.com/app/apikey. Also does other things with screenshots and the google gen ai API.
 
 ![Demo](.github/new_demo.gif)
 
 ## Features
 
 - **Instant Conversion**: Capture any math expression and get LaTeX code on your clipboard.
-- **Custom Shortcuts**: Configurable commands and shortctus via `config.json` (Windows default: `Win+Alt+Z`).
+- **Custom Shortcuts**: Configurable commands and shortctus via `config.json`. Add new commands with associated shortcuts
 - **Sound Feedback**: Audio cue when conversion is done and LaTeX is ready to paste.
 - **Platform Goals**: Windows-ready now; Linux/macOS support coming soon.
+
+Default commands, each mapped to a shortcut:
+
+1. math2latex: Convert math content (handwritten or already rendered) into pasteable latex code
+2. text_extraction: Extract all text from screenshot in plain formatting
+3. table: Convert image into latex formatted table
+4. chem2smiles: Convert chemical structure/s in image to pasteable SMILES formatting
 
 ---
 
@@ -80,14 +87,25 @@ To make Im2Latex act like an installed application (accessible via Windows Searc
 
 Modify the default shortcut (`Win+Shift+Z`) by editing `config.json`:
 1. Open `config.json` in the project folder.
-2. Update the `shortcuts` section:
+2. Update the `shortcuts` section, 'action' corresponds to a prompt for the LLM also defined in the config:
    ```json
-   "shortcuts": {
-        "windows": [
-            {"shortcut_str": "ctrl+shift+z", "action": "math2latex"},
-            {"shortcut_str": "ctrl+shift+x", "action": "text_extraction"},
-        ]
-    },
+   {
+      "api_key": "[MASKED_API_KEY]",
+      "prompts": {
+         "math2latex": "prompt1",
+         "text_extraction": "prompt2",
+         "table": "prompt3",
+         "chem2smiles": "prompt4"
+      },
+      "shortcuts": {
+         "windows": [
+               {"shortcut_str": "ctrl+alt+z", "action": "math2latex"},
+               {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
+               {"shortcut_str": "ctrl+alt+c", "action": "table"},
+               {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"}
+         ]
+      }
+   }
    ```
 3. Supported modifiers: `win`, `ctrl`, `alt`, `shift`  
    Supported keys: `a-z`, `0-9`
