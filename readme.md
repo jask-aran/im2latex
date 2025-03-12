@@ -32,14 +32,16 @@ Default commands, each mapped to a shortcut:
 ---
 
 ## Setup
-1. **Clone Repo**  
+1. **Clone Repo**
+   Clone or download as zip into an installation directory.
 
    ```
    git clone https://github.com/jask-aran/im2latex.git
    cd im2latex
    ```
 
-2. **Set Up Virtual Environment & Install Dependencies**  
+3. **Set Up Virtual Environment & Install Dependencies**
+   Run in installation directory
    ```
    python -m venv .venv
    .venv\Scripts\activate  # Windows
@@ -48,7 +50,7 @@ Default commands, each mapped to a shortcut:
    pip install -r requirements.txt
    ```
 
-3. **Configure API Key**  
+5. **Configure API Key**  
    - Run `main.py` once to generate a default `config.json`:
     ```
     .venv\Scripts\activate
@@ -56,7 +58,7 @@ Default commands, each mapped to a shortcut:
     ```
    - Edit `config.json` in the project folder to add your Google Generative AI API key
 
-5. **Run the Application**  
+6. **Run the Application**  
    ```
    .venv\Scripts\activate
    python main.py
