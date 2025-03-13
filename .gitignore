@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 
 # Virtual environment
-venv/
+.venv/
 
 # Build and distribution directories
 build/
