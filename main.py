@@ -3,18 +3,10 @@ import os
 import json
 import time
 
-from PyQt5.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QRubberBand,
-    QSystemTrayIcon,
-    QMenu,
-    QAction,
-    QMessageBox,
-)
-from PyQt5.QtCore import Qt, QRect, QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from PyQt5.QtMultimedia import QSound
-from PyQt5.QtGui import QCursor, QIcon, QPixmap, QPainter, QColor, QImage, QPen
 import mss
 from PIL import Image
 from google import genai
@@ -162,6 +154,68 @@ class ScreenshotApp(QMainWindow):
             self.close()
 
 
+class ChatApp(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.initUI()
+
+    def initUI(self):
+        # Set window properties
+        self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowTitle("Chat Window")
+        self.setGeometry(100, 100, 400, 500)
+
+        # Create layout
+        layout = QVBoxLayout()
+
+        # Create response display area
+        self.response_area = QTextEdit()
+        self.response_area.setReadOnly(True)
+        self.response_area.setFont(QFont("Arial", 10))
+        self.response_area.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.response_area.setMinimumHeight(300)
+
+        # Create input field
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("Type your message here...")
+        self.input_field.setFont(QFont("Arial", 10))
+        self.input_field.returnPressed.connect(self.send_message)
+
+        # Create send button
+        self.send_button = QPushButton("Send")
+        self.send_button.clicked.connect(self.send_message)
+
+        # Add widgets to layout
+        layout.addWidget(self.response_area)
+        layout.addWidget(self.input_field)
+        layout.addWidget(self.send_button)
+
+        # Set layout
+        self.setLayout(layout)
+
+    def send_message(self):
+        message = self.input_field.text().strip()
+        if message:
+            # Add user message to response area
+            self.response_area.append(f"You: {message}")
+
+            # Clear input field
+            self.input_field.clear()
+
+            # Here you would typically process the message and get a response
+            # For now, we'll just echo it back
+            self.add_response(f"Echo: {message}")
+
+    def add_response(self, response):
+        """Add a response to the response area"""
+        self.response_area.append(response)
+        self.response_area.append("")  # Add blank line for spacing
+
+    def clear_chat(self):
+        """Clear the chat history"""
+        self.response_area.clear()
+
+
 class ApiWorker(QObject):
     finished = pyqtSignal(str, str, Image.Image)  # response_text, action, image
     error = pyqtSignal(str)
@@ -291,6 +345,7 @@ class Im2LatexApp:
         menu.addAction(QAction("Open Folder", self.app, triggered=self.open_folder))
         menu.addAction(QAction("Print History", self.app, triggered=self.print_history))
         menu.addAction(QAction("Reset History", self.app, triggered=self.reset_history))
+        menu.addAction(QAction("Show Chat", self.app, triggered=self.show_chat))
         menu.addAction(QAction("Exit", self.app, triggered=self.app.quit))
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
@@ -360,6 +415,12 @@ class Im2LatexApp:
         else:
             self.main_gui.raise_()
             self.main_gui.activateWindow()
+
+    def show_chat(self):
+        self.chat_window = ChatApp()
+        self.chat_window.show()
+        self.chat_window.activateWindow()
+        self.chat_window.setFocus()
 
     def open_folder(self):
         os.startfile(os.getcwd())
