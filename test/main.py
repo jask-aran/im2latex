@@ -323,32 +323,15 @@ class Im2LatexApp:
 
         self.storage_manager = StorageManager()
 
-        # Use mss to get the actual screen geometry instead of Qt
-        with mss.mss() as sct:
-            # Get all monitors and find the bounding box
-            monitors = sct.monitors[1:]  # Skip the "All in One" monitor (index 0)
-            if monitors:
-                # Calculate the bounding box of all monitors
-                left = min(m["left"] for m in monitors)
-                top = min(m["top"] for m in monitors)
-                right = max(m["left"] + m["width"] for m in monitors)
-                bottom = max(m["top"] + m["height"] for m in monitors)
-                
-                self.monitor_geometry = {
-                    "top": top,
-                    "left": left,
-                    "width": right - left,
-                    "height": bottom - top,
-                }
-                self.virtual_rect = QRect(left, top, right - left, bottom - top)
-            else:
-                # Fallback to primary monitor
-                primary = sct.monitors[0]
-                self.monitor_geometry = primary
-                self.virtual_rect = QRect(
-                    primary["left"], primary["top"], 
-                    primary["width"], primary["height"]
-                )
+        self.virtual_rect = QRect()
+        for screen in self.app.screens():
+            self.virtual_rect = self.virtual_rect.united(screen.geometry())
+        self.monitor_geometry = {
+            "top": self.virtual_rect.top(),
+            "left": self.virtual_rect.left(),
+            "width": self.virtual_rect.width(),
+            "height": self.virtual_rect.height(),
+        }
 
         self.tray_icon = QSystemTrayIcon(QIcon(resource_path(ICON_NORMAL)), self.app)
         self.tray_icon.setToolTip("Im2Latex")
@@ -453,7 +436,6 @@ class Im2LatexApp:
 
 
 def main():
-    QApplication.setAttribute(Qt.AA_DisableHighDpiScaling, True)
     app = Im2LatexApp()
     app.run()
 
