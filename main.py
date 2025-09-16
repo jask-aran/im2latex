@@ -9,12 +9,13 @@ from PyQt5.QtGui import *
 from PyQt5.QtMultimedia import QSound
 import mss
 from PIL import Image
-from google import genai
 from pathlib import Path
 
 from shortcuts import ShortcutManager
 from storage import StorageManager
 from gui import MainWindow
+from chat_gui import ChatApp
+from api_manager import ApiManager, ChatApiManager
 
 ICON_NORMAL = "assets/scissor.png"
 ICON_LOADING = "assets/sand-clock.png"
@@ -166,154 +167,6 @@ class ScreenshotApp(QMainWindow):
             self.close()
 
 
-class ChatApp(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.initUI()
-
-    def initUI(self):
-        # Set window properties
-        self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setWindowTitle("Chat Window")
-        self.setGeometry(100, 100, 400, 500)
-
-        # Create layout
-        layout = QVBoxLayout()
-
-        # Create response display area
-        self.response_area = QTextEdit()
-        self.response_area.setReadOnly(True)
-        self.response_area.setFont(QFont("Arial", 10))
-        self.response_area.setFrameStyle(QFrame.Panel | QFrame.Sunken)
-        self.response_area.setMinimumHeight(300)
-
-        # Create input field
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Type your message here...")
-        self.input_field.setFont(QFont("Arial", 10))
-        self.input_field.returnPressed.connect(self.send_message)
-
-        # Create send button
-        self.send_button = QPushButton("Send")
-        self.send_button.clicked.connect(self.send_message)
-
-        # Add widgets to layout
-        layout.addWidget(self.response_area)
-        layout.addWidget(self.input_field)
-        layout.addWidget(self.send_button)
-
-        # Set layout
-        self.setLayout(layout)
-
-    def send_message(self):
-        message = self.input_field.text().strip()
-        if message:
-            # Add user message to response area
-            self.response_area.append(f"You: {message}")
-
-            # Clear input field
-            self.input_field.clear()
-
-            # Here you would typically process the message and get a response
-            # For now, we'll just echo it back
-            self.add_response(f"Echo: {message}")
-
-    def add_response(self, response):
-        """Add a response to the response area"""
-        self.response_area.append(response)
-        self.response_area.append("")  # Add blank line for spacing
-
-    def clear_chat(self):
-        """Clear the chat history"""
-        self.response_area.clear()
-
-
-class ApiWorker(QObject):
-    finished = pyqtSignal(str, str, Image.Image)  # response_text, action, image
-    error = pyqtSignal(str)
-
-    def __init__(self, client, prompt_text, action, image):
-        super().__init__()
-        self.client = client
-        self.prompt_text = prompt_text
-        self.action = action
-        self.image = image
-
-    @pyqtSlot()
-    def process(self):
-        """Process the API request in a separate thread."""
-        try:
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash", contents=[self.prompt_text, self.image]
-            )
-            response_text = response.text
-
-            if not response_text:  # Check for empty or None response
-                raise ValueError("API returned an empty or invalid response")
-
-            response_text = response_text.strip()
-            if response_text.startswith("```latex") or response_text.startswith("```"):
-                response_text = response_text.split("\n", 1)[-1].rsplit("\n", 1)[0]
-            response_text = response_text.strip()
-
-            self.finished.emit(response_text, self.action, self.image)
-        except Exception as e:
-            self.error.emit(str(e))
-
-
-class ApiManager(QObject):
-    api_response_ready = pyqtSignal(
-        str, str, Image.Image
-    )  # response_text, action, image
-    api_error = pyqtSignal(str)
-
-    def __init__(self, api_key):
-        super().__init__()
-        self.client = genai.Client(api_key=api_key)
-        self.thread = None
-        self.worker = None
-        self.api_in_progress = False
-
-    def update_api_key(self, api_key):
-        """Update the API key if needed."""
-        self.client = genai.Client(api_key=api_key)
-
-    def send_request(self, image, prompt_text, action):
-        self.api_in_progress = True
-
-        self.thread = QThread()
-        self.worker = ApiWorker(self.client, prompt_text, action, image)
-        self.worker.moveToThread(self.thread)
-        self.thread.started.connect(self.worker.process)
-        self.worker.finished.connect(self._handle_response)
-        self.worker.error.connect(self._handle_error)
-        self.worker.finished.connect(self._cleanup_thread)
-        self.worker.error.connect(self._cleanup_thread)
-        self.thread.start()
-        return True
-
-    def _handle_response(self, response_text, action, image):
-        self.api_response_ready.emit(response_text, action, image)
-        self.api_in_progress = False
-
-    def _handle_error(self, error_message):
-        self.api_error.emit(error_message)
-        self.api_in_progress = False
-
-    def _cleanup_thread(self):
-        """Clean up the thread after the worker has finished."""
-        if self.thread and self.thread.isRunning():
-            self.thread.quit()
-            self.thread.wait()
-        self.thread = None
-        self.worker = None
-
-    def cleanup(self):
-        """Clean up resources when shutting down."""
-        if self.thread and self.thread.isRunning():
-            self.thread.quit()
-            self.thread.wait()
-
 
 class Im2LatexApp:
     def __init__(self):
@@ -321,12 +174,14 @@ class Im2LatexApp:
         self.app.setQuitOnLastWindowClosed(False)
         self.screenshot_window = None
         self.main_gui = None
+        self.chat_window = None
         self.app.aboutToQuit.connect(self.cleanup)
 
         self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
         self.api_manager = ApiManager(self.config_manager.get_api_key())
         self.api_manager.api_response_ready.connect(self.process_response)
         self.api_manager.api_error.connect(self.handle_api_error)
+        self.chat_manager = ChatApiManager(self.config_manager.get_api_key())
 
         all_shortcuts = self.config_manager.get_all_shortcuts()
         self.shortcut_manager = ShortcutManager(
@@ -382,6 +237,7 @@ class Im2LatexApp:
     def cleanup(self):
         self.shortcut_manager.cleanup()
         self.api_manager.cleanup()
+        self.chat_manager.cleanup()
 
     def run_pipeline(self, action):
         if self.api_manager.api_in_progress:
@@ -446,10 +302,20 @@ class Im2LatexApp:
             self.main_gui.activateWindow()
 
     def show_chat(self):
-        self.chat_window = ChatApp()
-        self.chat_window.show()
-        self.chat_window.activateWindow()
+        if self.chat_window is None:
+            self.chat_window = ChatApp(self.chat_manager)
+            self.chat_window.destroyed.connect(self._chat_window_destroyed)
+
+        if not self.chat_window.isVisible():
+            self.chat_window.show()
+        else:
+            self.chat_window.raise_()
+            self.chat_window.activateWindow()
+
         self.chat_window.setFocus()
+
+    def _chat_window_destroyed(self, _=None):
+        self.chat_window = None
 
     def open_folder(self):
         os.startfile(os.getcwd())
