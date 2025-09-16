@@ -34,7 +34,19 @@ DEFAULT_CONFIG = {
             {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
             {"shortcut_str": "ctrl+alt+c", "action": "table"},
             {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"},
-        ]
+        ],
+        "darwin": [
+            {"shortcut_str": "ctrl+alt+z", "action": "math2latex"},
+            {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
+            {"shortcut_str": "ctrl+alt+c", "action": "table"},
+            {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"},
+        ],
+        "linux": [
+            {"shortcut_str": "ctrl+alt+z", "action": "math2latex"},
+            {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
+            {"shortcut_str": "ctrl+alt+c", "action": "table"},
+            {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"},
+        ],
     },
 }
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))

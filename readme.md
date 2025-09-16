@@ -87,7 +87,7 @@ To make Im2Latex act like an installed application (accessible via Windows Searc
 
 ## Customizing Shortcuts
 
-Modify the default shortcut (`Win+Shift+Z`) by editing `config.json`:
+Modify the default shortcuts by editing `config.json`:
 1. Open `config.json` in the project folder.
 2. Update the `shortcuts` section, 'action' corresponds to a prompt for the LLM also defined in the config:
    ```json
@@ -105,10 +105,25 @@ Modify the default shortcut (`Win+Shift+Z`) by editing `config.json`:
                {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
                {"shortcut_str": "ctrl+alt+c", "action": "table"},
                {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"}
+         ],
+         "darwin": [
+               {"shortcut_str": "ctrl+alt+z", "action": "math2latex"},
+               {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
+               {"shortcut_str": "ctrl+alt+c", "action": "table"},
+               {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"}
+         ],
+         "linux": [
+               {"shortcut_str": "ctrl+alt+z", "action": "math2latex"},
+               {"shortcut_str": "ctrl+alt+x", "action": "text_extraction"},
+               {"shortcut_str": "ctrl+alt+c", "action": "table"},
+               {"shortcut_str": "ctrl+alt+s", "action": "chem2smiles"}
          ]
       }
    }
    ```
-3. Supported modifiers: `win`, `ctrl`, `alt`, `shift`  
+3. Supported modifiers:
+   - **Windows**: `win`, `ctrl`, `alt`, `shift`
+   - **macOS** (`darwin` config key): `cmd`, `ctrl`, `alt`/`option`, `shift`
+   - **Linux**: `super`/`win`, `ctrl`, `alt`, `shift`
    Supported keys: `a-z`, `0-9`
 
