@@ -303,7 +303,7 @@ class Im2LatexApp:
 
     def show_chat(self):
         if self.chat_window is None:
-            self.chat_window = ChatApp(self.chat_manager)
+            self.chat_window = ChatApp(self.chat_manager, self.storage_manager)
             self.chat_window.destroyed.connect(self._chat_window_destroyed)
 
         if not self.chat_window.isVisible():
