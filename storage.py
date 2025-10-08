@@ -1,15 +1,20 @@
 import sqlite3
-import os
 from pathlib import Path
 from datetime import datetime
 import shutil
 
+from PyQt5.QtCore import QObject, pyqtSignal
 
-class StorageManager:
+
+class StorageManager(QObject):
+    entry_saved = pyqtSignal()
+    history_reset = pyqtSignal()
+
     def __init__(self, db_path="history.db", screenshots_dir="screenshots"):
+        super().__init__()
         self.db_path = Path(db_path)
         self.screenshots_dir = Path(screenshots_dir)
-        self.screenshots_dir.mkdir(exist_ok=True)  # Create folder if it doesn’t exist
+        self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         self.initialize_db()
 
     def initialize_db(self):
@@ -32,17 +37,16 @@ class StorageManager:
 
     def reset_db(self):
         """Reset the database and delete all saved screenshots."""
-        # Delete the screenshots folder and its contents
         if self.screenshots_dir.exists():
             shutil.rmtree(self.screenshots_dir)
-        self.screenshots_dir.mkdir()  # Recreate the empty folder
+        self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-        # Drop and recreate the table
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DROP TABLE IF EXISTS screenshots")
-            conn.commit()
+        if self.db_path.exists():
+            self.db_path.unlink()
+
         self.initialize_db()
         print("Database and screenshots reset successfully.")
+        self.history_reset.emit()
 
     def save_entry(self, image, prompt, raw_response, shortcut):
         """Save the screenshot and metadata to the filesystem and database."""
@@ -72,11 +76,12 @@ class StorageManager:
                 """
                 UPDATE screenshots SET image_path = ? WHERE id = ?
             """,
-                (str(image_path), entry_id),
+                (image_filename, entry_id),
             )
             conn.commit()
 
         print(f"Saved entry: ID={entry_id}, Timestamp={timestamp}, Shortcut={shortcut}")
+        self.entry_saved.emit()
 
     def get_all_entries(self):
         """Retrieve all entries in reverse chronological order."""
@@ -88,7 +93,21 @@ class StorageManager:
                 ORDER BY timestamp DESC
             """
             )
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+
+        resolved_rows = []
+        for row in rows:
+            row_list = list(row)
+            stored_path = Path(row_list[2])
+            resolved_path = (
+                stored_path
+                if stored_path.is_absolute()
+                else (self.screenshots_dir / stored_path)
+            )
+            row_list[2] = str(resolved_path)
+            resolved_rows.append(tuple(row_list))
+
+        return resolved_rows
 
     def print_entries(self):
         """Print a basic representation of the database, focusing on raw responses."""

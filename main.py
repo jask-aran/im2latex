@@ -1,21 +1,21 @@
-import sys
-import os
 import json
+import sys
 import time
 
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtMultimedia import QSound
 import mss
 from PIL import Image
 from pathlib import Path
+from PyQt5.QtCore import QRect, Qt, QUrl
+from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QIcon, QImage, QPainter, QPen
+from PyQt5.QtMultimedia import QSound
+from PyQt5.QtWidgets import QApplication, QAction, QMainWindow, QMenu, QMessageBox, QRubberBand, QSystemTrayIcon
 
 from shortcuts import ShortcutManager
 from storage import StorageManager
 from gui import MainWindow
 from chat_gui import ChatApp
 from api_manager import ApiManager, ChatApiManager
+from resources import BASE_DIR, resource_path
 
 ICON_NORMAL = "assets/scissor.png"
 ICON_LOADING = "assets/sand-clock.png"
@@ -50,13 +50,6 @@ DEFAULT_CONFIG = {
         ],
     },
 }
-os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
-
-
-def resource_path(relative_path):
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
 
 
 class ConfigManager:
@@ -87,7 +80,7 @@ class ConfigManager:
             msg_box.addButton(QMessageBox.Ok)
             msg_box.exec_()
             if msg_box.clickedButton() == open_folder_button:
-                os.startfile(os.getcwd())
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.file_path.parent)))
             sys.exit(1)
 
     def get_config(self):
@@ -109,12 +102,13 @@ class ScreenshotApp(QMainWindow):
         super().__init__()
         self.callback = callback
         self.monitor_geometry = monitor_geometry
-        self.screenshot = mss.mss().grab(self.monitor_geometry)
+        with mss.mss() as capture_session:
+            screenshot = capture_session.grab(self.monitor_geometry)
         self.image = QImage(
-            self.screenshot.rgb,
-            self.screenshot.width,
-            self.screenshot.height,
-            self.screenshot.width * 3,
+            screenshot.rgb,
+            screenshot.width,
+            screenshot.height,
+            screenshot.width * 3,
             QImage.Format_RGB888,
         )
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -151,15 +145,41 @@ class ScreenshotApp(QMainWindow):
             self.rubberBand.setGeometry(QRect(self.origin, event.pos()).normalized())
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            rect = self.rubberBand.geometry()
+        if event.button() == Qt.LeftButton and self.rubberBand.isVisible():
+            selection = self.rubberBand.geometry().normalized()
+            self.rubberBand.hide()
+
+            if selection.width() <= 1 or selection.height() <= 1:
+                print("Selection too small; ignoring capture request")
+                self.close()
+                return
+
+            global_top_left = self.mapToGlobal(selection.topLeft())
+            capture_box = {
+                "top": int(global_top_left.y()),
+                "left": int(global_top_left.x()),
+                "width": int(selection.width()),
+                "height": int(selection.height()),
+            }
+
+            self.hide()
+            QApplication.processEvents()
+
+            pil_image = None
+            try:
+                with mss.mss() as capture_session:
+                    screenshot = capture_session.grab(capture_box)
+                pil_image = Image.frombytes(
+                    "RGB",
+                    (screenshot.width, screenshot.height),
+                    screenshot.rgb,
+                )
+            except Exception as exc:
+                print(f"Failed to capture screenshot: {exc}")
+
             self.close()
-            pil_image = Image.frombytes(
-                "RGB",
-                (self.screenshot.width, self.screenshot.height),
-                self.screenshot.rgb,
-            ).crop((rect.left(), rect.top(), rect.right(), rect.bottom()))
-            self.callback(pil_image)
+            if pil_image is not None:
+                self.callback(pil_image)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
@@ -177,7 +197,7 @@ class Im2LatexApp:
         self.chat_window = None
         self.app.aboutToQuit.connect(self.cleanup)
 
-        self.config_manager = ConfigManager("config.json", DEFAULT_CONFIG)
+        self.config_manager = ConfigManager(BASE_DIR / CONFIG_FILE, DEFAULT_CONFIG)
         self.api_manager = ApiManager(self.config_manager.get_api_key())
         self.api_manager.api_response_ready.connect(self.process_response)
         self.api_manager.api_error.connect(self.handle_api_error)
@@ -188,7 +208,9 @@ class Im2LatexApp:
             self.app, all_shortcuts, self.run_pipeline
         )
 
-        self.storage_manager = StorageManager()
+        self.storage_manager = StorageManager(
+            db_path=BASE_DIR / "history.db", screenshots_dir=BASE_DIR / "screenshots"
+        )
 
         # Use mss to get the actual screen geometry instead of Qt
         with mss.mss() as sct:
@@ -318,7 +340,7 @@ class Im2LatexApp:
         self.chat_window = None
 
     def open_folder(self):
-        os.startfile(os.getcwd())
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(BASE_DIR)))
 
     def print_history(self):
         self.storage_manager.print_entries()
