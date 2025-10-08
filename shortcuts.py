@@ -23,6 +23,10 @@ class ShortcutBackend:
     def install_event_handler(self, app):
         raise NotImplementedError
 
+    def teardown(self):
+        """Release any resources held by the backend."""
+        return None
+
 
 class WindowsShortcutBackend(ShortcutBackend):
     MODIFIER_MAP = {"ctrl": 0x0002, "alt": 0x0001, "shift": 0x0004, "win": 0x0008}
@@ -68,6 +72,8 @@ class WindowsShortcutBackend(ShortcutBackend):
     def __init__(self):
         self.user32 = ctypes.windll.user32
         self.shortcuts = {}
+        self.event_filter = None
+        self._app = None
 
     def install_shortcut(self, modifiers, key, shortcut_id, callback):
         mod_value = sum(self.MODIFIER_MAP.get(m, 0) for m in modifiers)
@@ -112,8 +118,20 @@ class WindowsShortcutBackend(ShortcutBackend):
                         return True, 0
                 return False, 0
 
+        self._app = app
         self.event_filter = WindowsEventFilter(self)
         app.installNativeEventFilter(self.event_filter)
+
+    def teardown(self):
+        for shortcut_id in list(self.shortcuts.keys()):
+            self.remove_shortcut(shortcut_id)
+        if self._app and self.event_filter:
+            try:
+                self._app.removeNativeEventFilter(self.event_filter)
+            except Exception:
+                pass
+        self.event_filter = None
+        self._app = None
 
 
 class MacShortcutBackend(ShortcutBackend):
@@ -206,6 +224,8 @@ class MacShortcutBackend(ShortcutBackend):
         self.carbon.RegisterEventHotKey.restype = ctypes.c_int32
         self.carbon.UnregisterEventHotKey.argtypes = [ctypes.c_void_p]
         self.carbon.UnregisterEventHotKey.restype = ctypes.c_int32
+        self.carbon.RemoveEventHandler.argtypes = [ctypes.c_void_p]
+        self.carbon.RemoveEventHandler.restype = ctypes.c_int32
         self.carbon.GetEventParameter.argtypes = [
             ctypes.c_void_p,
             ctypes.c_uint32,
@@ -301,6 +321,18 @@ class MacShortcutBackend(ShortcutBackend):
         # Carbon handler installed during initialization; nothing to do here.
         return None
 
+    def teardown(self):
+        for shortcut_id in list(self.shortcuts.keys()):
+            self.remove_shortcut(shortcut_id)
+        if self.event_handler_ref:
+            try:
+                self.carbon.RemoveEventHandler(self.event_handler_ref)
+            except Exception:
+                pass
+            self.event_handler_ref = ctypes.c_void_p()
+        self.hotkey_refs.clear()
+        self.shortcuts.clear()
+
 
 class LinuxShortcutBackend(ShortcutBackend):
     SHIFT_MASK = 1 << 0
@@ -387,6 +419,8 @@ class LinuxShortcutBackend(ShortcutBackend):
         self.xlib.XSync.restype = ctypes.c_int
         self.xlib.XSetErrorHandler.argtypes = [ctypes.c_void_p]
         self.xlib.XSetErrorHandler.restype = ctypes.c_void_p
+        self.xlib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        self.xlib.XCloseDisplay.restype = ctypes.c_int
 
         self.display = self.xlib.XOpenDisplay(None)
         if not self.display:
@@ -395,6 +429,7 @@ class LinuxShortcutBackend(ShortcutBackend):
         self.shortcuts = {}
         self.grab_masks = {}
         self.event_filter = None
+        self._app = None
         self._last_error_code = None
         self._error_handler_proc = self.ERROR_HANDLER_FUNC(self._on_error)
 
@@ -536,6 +571,24 @@ class LinuxShortcutBackend(ShortcutBackend):
 
         self.event_filter = LinuxEventFilter(self)
         app.installNativeEventFilter(self.event_filter)
+        self._app = app
+
+    def teardown(self):
+        for shortcut_id in list(self.shortcuts.keys()):
+            self.remove_shortcut(shortcut_id)
+        if self._app and self.event_filter:
+            try:
+                self._app.removeNativeEventFilter(self.event_filter)
+            except Exception:
+                pass
+        self.event_filter = None
+        self._app = None
+        if self.display:
+            try:
+                self.xlib.XCloseDisplay(self.display)
+            except Exception:
+                pass
+            self.display = None
 
 
 class ShortcutManager:
@@ -556,6 +609,7 @@ class ShortcutManager:
         self.shortcuts_dict = shortcuts_dict
         self.run_pipeline = run_pipeline  # Store the bound method
         self.backend.install_event_handler(app)
+        self._action_shortcut_ids = {}
         self.setup_platform_shortcuts()
 
     def assign_shortcut(self, shortcut_str, callback):
@@ -596,12 +650,23 @@ class ShortcutManager:
                     print(
                         f"Registered shortcut '{shortcut['shortcut_str']}' for action '{action}' (ID: {shortcut_id})"
                     )
+                    self._action_shortcut_ids.setdefault(action, []).append(shortcut_id)
                 else:
                     print(f"Could not register shortcut '{shortcut['shortcut_str']}'")
 
     def unassign_shortcut(self, shortcut_id):
-        return self.backend.remove_shortcut(shortcut_id)
+        removed = self.backend.remove_shortcut(shortcut_id)
+        if removed:
+            for ids in self._action_shortcut_ids.values():
+                if shortcut_id in ids:
+                    ids.remove(shortcut_id)
+                    break
+        return removed
 
     def cleanup(self):
-        self.backend.shortcuts.clear()
+        for ids in list(self._action_shortcut_ids.values()):
+            for shortcut_id in list(ids):
+                self.backend.remove_shortcut(shortcut_id)
+        self._action_shortcut_ids.clear()
+        self.backend.teardown()
         self.next_id = 1

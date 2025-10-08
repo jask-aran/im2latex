@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Dict, List, Tuple
 
 from PIL import Image
-from PyQt5.QtCore import pyqtSlot, Qt
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QFrame,
@@ -21,6 +21,37 @@ from api_manager import ChatApiManager
 from storage import StorageManager
 
 HistoryProvider = Callable[[], Sequence[Tuple[Any, ...]]]
+
+
+class _ImageLoadWorker(QObject):
+    """Load images off the UI thread to keep the chat responsive."""
+
+    finished = pyqtSignal(Image.Image)
+    error = pyqtSignal(str)
+
+    def __init__(self, image_path: str) -> None:
+        super().__init__()
+        self._image_path = image_path
+
+    @pyqtSlot()
+    def load(self) -> None:
+        try:
+            with Image.open(self._image_path) as image:
+                pil_image = image.copy()
+        except FileNotFoundError:
+            self.error.emit("Unable to locate the most recent screenshot on disk.")
+            return
+        except Exception as exc:  # pragma: no cover - defensive path
+            self.error.emit(f"Failed to load screenshot: {exc}")
+            return
+
+        try:
+            pil_image.load()
+        except Exception as exc:  # pragma: no cover - defensive path
+            self.error.emit(f"Failed to prepare screenshot: {exc}")
+            return
+
+        self.finished.emit(pil_image)
 
 
 class ChatApp(QWidget):
@@ -44,6 +75,9 @@ class ChatApp(QWidget):
         self._history_source: StorageManager | HistoryProvider | None = history_source
         self.conversation: List[Dict[str, Any]] = []
         self.awaiting_response = False
+        self._image_loader_thread: QThread | None = None
+        self._image_loader: _ImageLoadWorker | None = None
+        self._image_loading = False
 
         self.chat_manager.chat_response_ready.connect(self._handle_response)
         self.chat_manager.chat_error.connect(self._handle_error)
@@ -175,26 +209,24 @@ class ChatApp(QWidget):
             )
             return
 
-        try:
-            with Image.open(image_path) as image:
-                pil_image = image.copy()
-        except FileNotFoundError:
-            self._append_message(
-                "System", "Unable to locate the most recent screenshot on disk."
-            )
-            return
-        except Exception as exc:  # pragma: no cover - defensive path
-            self._append_message("System", f"Failed to load screenshot: {exc}")
+        if self._image_loading:
             return
 
-        pil_image.load()
-        image_message: Dict[str, Any] = {
-            "role": "user",
-            "image": pil_image,
-            "content": "",
-        }
-        self.conversation.append(image_message)
-        self._append_message("You", "[Image attached]")
+        self._image_loader_thread = QThread()
+        self._image_loader = _ImageLoadWorker(image_path)
+        self._image_loader.moveToThread(self._image_loader_thread)
+        self._image_loader_thread.started.connect(self._image_loader.load)
+        self._image_loader.finished.connect(self._on_image_loaded)
+        self._image_loader.error.connect(self._on_image_error)
+        self._image_loader.finished.connect(self._cleanup_image_loader)
+        self._image_loader.error.connect(self._cleanup_image_loader)
+        self._image_loading = True
+        self._update_insert_buttons_state()
+        try:
+            self._image_loader_thread.start()
+        except Exception as exc:  # pragma: no cover - defensive path
+            self._append_message("System", f"Unable to load screenshot: {exc}")
+            self._cleanup_image_loader()
 
     def clear_chat(self) -> None:
         self.conversation.clear()
@@ -214,7 +246,8 @@ class ChatApp(QWidget):
         if not hasattr(self, "insert_text_button"):
             return
 
-        disabled = is_loading if is_loading is not None else self.awaiting_response
+        base_disabled = is_loading if is_loading is not None else self.awaiting_response
+        disabled = base_disabled or self._image_loading
         has_history = self._history_source is not None
         self.insert_text_button.setDisabled(disabled or not has_history)
         self.insert_image_button.setDisabled(disabled or not has_history)
@@ -243,3 +276,29 @@ class ChatApp(QWidget):
         self.awaiting_response = False
         self._set_loading_state(False)
         self._append_message("System", f"Error: {error_message}")
+
+    @pyqtSlot(Image.Image)
+    def _on_image_loaded(self, pil_image: Image.Image) -> None:
+        image_message: Dict[str, Any] = {
+            "role": "user",
+            "image": pil_image,
+            "content": "",
+        }
+        self.conversation.append(image_message)
+        self._append_message("You", "[Image attached]")
+
+    @pyqtSlot(str)
+    def _on_image_error(self, message: str) -> None:
+        self._append_message("System", message)
+
+    def _cleanup_image_loader(self) -> None:
+        if self._image_loader_thread:
+            self._image_loader_thread.quit()
+            self._image_loader_thread.wait()
+            self._image_loader_thread.deleteLater()
+            self._image_loader_thread = None
+        if self._image_loader:
+            self._image_loader.deleteLater()
+            self._image_loader = None
+        self._image_loading = False
+        self._update_insert_buttons_state()

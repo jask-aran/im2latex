@@ -1,0 +1,61 @@
+# Im2Latex Architecture & Bug Review
+
+## Executive Summary
+- **Platform-specific regressions:** File and folder launching rely on `os.startfile`, which raises on macOS/Linux and breaks both config recovery and the tray "Open Folder" action. The GUI also re-enables high-DPI scaling after `main.py` disables it, leading to undefined rendering behaviour across displays.【F:main.py†L84-L91】【F:main.py†L320-L336】【F:gui.py†L21-L31】
+- **Shortcut lifecycle leaks:** Recent platform backends register global hotkeys but `ShortcutManager.cleanup` only clears Python dictionaries, leaving OS registrations, Carbon hotkey refs, and X11 grabs alive across restarts. The manager also discards shortcut IDs, preventing targeted unregistration during reconfiguration.【F:shortcuts.py†L270-L295】【F:shortcuts.py†L357-L520】【F:shortcuts.py†L561-L607】
+- **Capture/API resilience gaps:** The screenshot flow accepts zero-area selections and pre-captures the screen before the user drags, while the API layer marks requests "in progress" without guarding thread start failures. Both behaviours can wedge the app until restart or produce empty payloads that waste quota.【F:main.py†L107-L168】【F:api_manager.py†L114-L212】
+- **Persistence semantics drift:** Resetting history drops tables but keeps the SQLite file and leaves absolute screenshot paths, so moving the install directory or expecting a true reset produces dangling entries and disk residue.【F:storage.py†L33-L113】
+- **UI responsiveness issues:** The history window polls SQLite every two seconds instead of reacting to save events, and the chat window loads full-resolution images synchronously on the UI thread, causing stutters with large captures.【F:gui.py†L220-L328】【F:chat_gui.py†L156-L210】
+
+## Architectural Assessment
+- **Monolithic orchestration in `main.py`:** Configuration, screenshot capture, tray management, shortcut orchestration, persistence wiring, and clipboard side-effects all live on the same class, which makes it difficult to evolve any one concern without risking regressions in another.【F:main.py†L55-L318】 Splitting bootstrapping, capture, and UI coordination into dedicated modules would make future enhancements safer.
+- **Inconsistent resource handling and duplication:** Multiple modules redeclare `resource_path` helpers and depend on implicit working directories, signalling that shared utilities and asset resolution are not centralised.【F:main.py†L55-L58】【F:gui.py†L21-L27】 Consolidating asset management (e.g., into a `resources` module) would reduce drift.
+- **UI components blend state management with view logic:** Widgets such as `HistoryItem` directly manipulate timers, disk paths, and clipboard state, while the chat window owns conversation state and asynchronous workers. This coupling makes testing difficult and complicates swapping in alternative storage or API providers.【F:gui.py†L161-L240】【F:chat_gui.py†L57-L229】 Extracting presenters or thin controllers around the widgets would create clearer seams.
+- **Backend abstractions remain global-singleton oriented:** `ShortcutManager` fabricates platform backends internally and tracks global IDs without exposing lifecycle hooks, while API managers own threads rather than delegating to a shared executor. These patterns hinder reuse in headless modes or alternative UIs.【F:shortcuts.py†L526-L609】【F:api_manager.py†L96-L209】 Introducing interfaces for dependency injection would unlock reuse and unit testing.
+- **Extensibility is configuration-bound but not modular:** Prompts, shortcuts, and outputs are all encoded in a single JSON file without schema validation or migration support, and runtime components pull values ad hoc.【F:main.py†L24-L103】 A typed settings layer (e.g., `pydantic`) and per-feature modules would better support future prompt types or output formats.
+
+## Detailed Findings
+
+### 1. Configuration & Bootstrapping
+1. **Non-Windows folder launching.** Both the config error dialog and the tray "Open Folder" handler call `os.startfile`, which only exists on Windows. On macOS/Linux the call raises `AttributeError`, crashing recovery and user navigation.【F:main.py†L84-L91】【F:main.py†L320-L324】 Use `QDesktopServices.openUrl` or `subprocess` guards by platform.
+2. **Conflicting DPI directives.** `main.py` disables Qt high-DPI scaling immediately before creating the application, while `gui.py` re-enables it at import time. Toggling both flags produces unpredictable scaling, especially on multi-monitor setups. Consolidate DPI policy in a single place before instantiating `QApplication`.【F:main.py†L333-L336】【F:gui.py†L21-L22】
+3. **Process-wide working directory change.** `os.chdir` runs at import time to pivot into the script directory, which can break relative paths for launched subprocesses or plugins that expect the user's original CWD. Prefer resolving resources via `Path(__file__).resolve()` instead.【F:main.py†L20-L60】
+
+### 2. Shortcut Infrastructure
+1. **Cleanup leaks OS registrations.** `ShortcutManager.cleanup` only clears `self.backend.shortcuts` and resets the ID counter, never calling backend-specific unregistration or releasing X11 displays. Carbon hotkey references and XGrabKey grabs therefore persist until process exit.【F:shortcuts.py†L270-L295】【F:shortcuts.py†L357-L520】【F:shortcuts.py†L605-L607】 Add per-backend teardown (`UnregisterEventHotKey`, `XUngrabKey`, `XCloseDisplay`) and track registered IDs.
+2. **Missing shortcut bookkeeping.** `setup_platform_shortcuts` prints registration success but discards the returned `shortcut_id`s, so later reconfiguration or selective removal is impossible. Store IDs per action to enable dynamic updates and proper cleanup.【F:shortcuts.py†L573-L600】
+3. **Mac handler lifetime.** The Carbon event handler remains installed for the lifetime of the process, but there is no matching uninstall call. Without detaching it on shutdown, reinitializing in the same process (e.g., tests) can double-register handlers.【F:shortcuts.py†L220-L304】
+
+### 3. Capture Pipeline
+1. **Pre-capture before selection.** `ScreenshotApp` grabs the screen in `__init__`, before the user draws a rectangle. Any UI that appears after launch (tooltips, menus) is missing from the capture. Move the grab into `mouseReleaseEvent` using the final geometry to capture what the user actually saw.【F:main.py†L107-L162】
+2. **Zero-area selections.** When the user clicks without dragging, `rect.left() == rect.right()` (and likewise for `top`/`bottom`), producing an empty crop. The callback still fires, sending a blank image to the API. Guard for minimum width/height before invoking the pipeline.【F:main.py†L153-L162】
+3. **Global geometry assumptions.** The code assumes `mss` monitor bounding boxes align with Qt's virtual desktop coordinates. Mixed-DPI setups often have fractional scaling offsets, so `QRect(left, top, width, height)` may not match the grabbed bitmap. Query Qt for logical-to-physical scaling or use `QApplication.primaryScreen().grabWindow` for consistency.【F:main.py†L193-L218】
+
+### 4. API Threading Layer
+1. **Flag wedged on thread failure.** `ApiManager.send_request` sets `api_in_progress = True` before starting the worker thread and never resets it if thread creation fails or raises synchronously. Subsequent shortcuts bail out forever until restart. Wrap thread startup in try/except and revert the flag on failure.【F:api_manager.py†L114-L166】
+2. **Chat manager mirrors the same risk.** `ChatApiManager.send_chat_request` flips `chat_in_progress` before `thread.start()` and, if thread creation fails, leaves the chat UI disabled. Apply the same defensive pattern.【F:api_manager.py†L183-L238】
+3. **No retry/backoff.** Both managers call `client.models.generate_content` once with no retries. Temporary network hiccups propagate directly to the UI. Consider a retry policy or queue to align with the intended resilient architecture.【F:api_manager.py†L20-L95】【F:api_manager.py†L183-L238】
+
+### 5. Storage & Persistence
+1. **Reset leaves SQLite file.** `StorageManager.reset_db` drops the table and recreates the screenshots directory but never removes `history.db`. Users selecting "Reset History" expect disk cleanup, not a leftover file with stale WAL journals.【F:storage.py†L33-L45】 Delete the DB file before reinitializing.
+2. **Absolute screenshot paths.** Entries persist absolute file paths; moving the installation directory or sharing the database with another machine leaves broken references. Store relative paths (to the screenshots directory) and resolve them at runtime.【F:storage.py†L56-L77】
+
+### 6. GUI & Chat Layers
+1. **Polling instead of events.** The history window polls SQLite every two seconds to detect changes, even though saves happen through `StorageManager`. This wastes CPU and disk and still misses updates if other processes write. Emit a Qt signal from `save_entry` and subscribe instead.【F:gui.py†L220-L328】【F:storage.py†L47-L79】
+2. **Synchronous image loading in chat.** `ChatApp.insert_last_image` opens and copies full-resolution PNGs on the UI thread, causing visible pauses for large captures or slow disks. Offload to a worker thread or cache thumbnails in the database.【F:chat_gui.py†L156-L210】
+3. **Clipboard feedback timers pile up.** Each `HistoryItem.copy_to_clipboard` call instantiates a new `QTimer` without stopping prior ones. Rapid clicks spawn multiple timers toggling button state unpredictably. Reuse a single timer per item or stop the old timer before creating a new one.【F:gui.py†L232-L310】
+
+## Recommended Next Steps
+1. Harden platform abstractions: replace `os.startfile` with cross-platform folder launching, unify DPI configuration, and remove global `chdir` side effects.
+2. Implement full shortcut lifecycle management with stored IDs, explicit unregister loops, and backend teardown hooks.
+3. Add capture validation and move the screen grab post-selection to ensure accurate payloads.
+4. Guard API thread start-up, add retries/backoff, and surface transient errors without wedging the pipeline.
+5. Normalize persistence by deleting `history.db` on reset, storing relative paths, and emitting signals on save to eliminate polling.
+6. Optimize UI responsiveness by making clipboard timers idempotent and loading chat images off the main thread.
+
+## Post-Fix Verification & Remaining Risks
+- **Configuration & platform UX resolved.** Folder launches now rely on `QDesktopServices` in both the config recovery dialog and tray action, and resources resolve through a shared helper that anchors to an immutable `BASE_DIR`, eliminating the previous Windows-only `os.startfile` dependency and global `chdir` side effect.【F:main.py†L1-L48】【F:main.py†L276-L296】【F:resources.py†L1-L20】 High-DPI flags are set exactly once in `main.py`, and the GUI module no longer toggles them at import.【F:main.py†L322-L330】【F:gui.py†L1-L28】
+- **Shortcut lifecycle cleaned up.** Each backend now tears down native handlers, unregisters OS hotkeys, and releases X11 displays; the manager keeps per-action ID bookkeeping so cleanup actually unregisters keys before quitting.【F:shortcuts.py†L1-L217】【F:shortcuts.py†L526-L609】
+- **Capture and pipeline hardening.** The screenshot flow ignores zero-area drags, re-grabs the selected rectangle after hiding the overlay, and surfaces capture failures, preventing blank payloads.【F:main.py†L112-L166】 API managers short-circuit if already busy, add retry/backoff inside the worker, and roll back flags if thread start fails so shortcuts recover gracefully.【F:api_manager.py†L1-L209】
+- **Persistence & UI responsiveness improved.** `StorageManager` emits signals on save/reset, stores relative paths, and removes the database file during resets; the history GUI listens for those signals instead of polling and uses a single timer per copy button.【F:storage.py†L1-L122】【F:gui.py†L200-L318】 Chat image insertion now loads screenshots on a background thread before attaching them to the conversation, avoiding UI stalls.【F:chat_gui.py†L1-L248】
+- **Still open:** Screen-geometry assumptions remain tied to `mss` monitor coordinates; on mixed-DPI multi-monitor Linux setups the Qt window may not align perfectly with capture results. Consider querying `QScreen` scaling factors in a follow-up.【F:main.py†L177-L220】

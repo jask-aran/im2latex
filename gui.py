@@ -1,6 +1,7 @@
-import os
 import sys
 from datetime import datetime
+from pathlib import Path
+
 from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -14,21 +15,11 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QApplication,
 )
-from PyQt5.QtGui import QIcon, QPixmap, QImage, QPainter, QColor
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QEvent
+from PyQt5.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
+from PyQt5.QtCore import QEvent, Qt, QTimer
 from PIL import Image
 
-# Enable high DPI scaling
-QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-
-
-def resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller"""
-    return (
-        os.path.join(sys._MEIPASS, relative_path)
-        if hasattr(sys, "_MEIPASS")
-        else os.path.join(os.path.abspath("."), relative_path)
-    )
+from resources import resource_path
 
 
 # Simple theme definitions - no generator needed for just two themes
@@ -108,36 +99,38 @@ class OverlayWidget(QWidget):
 
     def _load_image(self):
         try:
-            # Load image at full resolution for the overlay
-            img = Image.open(self.image_path)
             parent_size = self.parent().size()
 
-            # Scale based on parent window size, but preserve resolution
-            max_width = int(parent_size.width() * 0.7)
-            max_height = int(parent_size.height() * 0.7)
+            # Load image at full resolution for the overlay
+            with Image.open(self.image_path) as img:
+                img_width, img_height = img.size
 
-            # Only resize if image is larger than max dimensions
-            if img.width > max_width or img.height > max_height:
-                scale = min(max_width / img.width, max_height / img.height)
-                new_size = (int(img.width * scale), int(img.height * scale))
-                img = img.resize(new_size, Image.Resampling.LANCZOS)
+                # Scale based on parent window size, but preserve resolution
+                max_width = int(parent_size.width() * 0.7)
+                max_height = int(parent_size.height() * 0.7)
 
-            if img.mode == "RGB":
-                qimage = QImage(
-                    img.tobytes(),
-                    img.width,
-                    img.height,
-                    img.width * 3,
-                    QImage.Format_RGB888,
-                )
-            else:
-                qimage = QImage(
-                    img.tobytes(),
-                    img.width,
-                    img.height,
-                    img.width * 4,
-                    QImage.Format_RGBA8888,
-                )
+                # Only resize if image is larger than max dimensions
+                if img.width > max_width or img.height > max_height:
+                    scale = min(max_width / img.width, max_height / img.height)
+                    new_size = (int(img.width * scale), int(img.height * scale))
+                    img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+                if img.mode == "RGB":
+                    qimage = QImage(
+                        img.tobytes(),
+                        img.width,
+                        img.height,
+                        img.width * 3,
+                        QImage.Format_RGB888,
+                    )
+                else:
+                    qimage = QImage(
+                        img.tobytes(),
+                        img.width,
+                        img.height,
+                        img.width * 4,
+                        QImage.Format_RGBA8888,
+                    )
 
             self.pixmap = QPixmap.fromImage(qimage)
             self.image_label.setPixmap(self.pixmap)
@@ -177,6 +170,10 @@ class HistoryItem(QWidget):
         ) = entry
         self.pixmap = None
         self.setMaximumHeight(300)
+        self._copy_reset_text = None
+        self._copy_timer = QTimer(self)
+        self._copy_timer.setSingleShot(True)
+        self._copy_timer.timeout.connect(self._reset_copy_button)
         self.init_ui()
 
     def init_ui(self):
@@ -256,28 +253,28 @@ class HistoryItem(QWidget):
     def _load_image(self):
         try:
             # Load a thumbnail for the history view
-            img = Image.open(self.image_path)
-            img_width, img_height = img.size
-            scale_factor = min(400 / img_width, 200 / img_height)
-            new_size = (int(img_width * scale_factor), int(img_height * scale_factor))
-            img = img.resize(new_size, Image.Resampling.LANCZOS)
+            with Image.open(self.image_path) as img:
+                img_width, img_height = img.size
+                scale_factor = min(400 / img_width, 200 / img_height)
+                new_size = (int(img_width * scale_factor), int(img_height * scale_factor))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
 
-            if img.mode == "RGB":
-                qimage = QImage(
-                    img.tobytes(),
-                    img.width,
-                    img.height,
-                    img.width * 3,
-                    QImage.Format_RGB888,
-                )
-            else:
-                qimage = QImage(
-                    img.tobytes(),
-                    img.width,
-                    img.height,
-                    img.width * 4,
-                    QImage.Format_RGBA8888,
-                )
+                if img.mode == "RGB":
+                    qimage = QImage(
+                        img.tobytes(),
+                        img.width,
+                        img.height,
+                        img.width * 3,
+                        QImage.Format_RGB888,
+                    )
+                else:
+                    qimage = QImage(
+                        img.tobytes(),
+                        img.width,
+                        img.height,
+                        img.width * 4,
+                        QImage.Format_RGBA8888,
+                    )
 
             self.pixmap = QPixmap.fromImage(qimage)
             self.image_label.setPixmap(self.pixmap)
@@ -293,20 +290,20 @@ class HistoryItem(QWidget):
         QApplication.clipboard().setText(self.raw_response)
 
         # Store the button text and create a new timer for the button effect
-        original_text = self.copy_button.text()
+        self._copy_reset_text = self.copy_button.text()
         self.copy_button.setText("Copied!")
         self.copy_button.setStyleSheet(THEMES[self.theme]["copy_button_hover"])
 
-        # Use a single timer to avoid multiple timers and C++ object deletion issues
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.timeout.connect(lambda: self._reset_copy_button(original_text))
-        timer.start(1500)
+        if self._copy_timer.isActive():
+            self._copy_timer.stop()
+        self._copy_timer.start(1500)
 
-    def _reset_copy_button(self, original_text):
-        # This is safer as it avoids lambda capturing the button
-        self.copy_button.setText(original_text)
+    def _reset_copy_button(self):
+        if self._copy_reset_text is None:
+            return
+        self.copy_button.setText(self._copy_reset_text)
         self.copy_button.setStyleSheet(THEMES[self.theme]["copy_button"])
+        self._copy_reset_text = None
 
     def save_image(self):
         try:
@@ -345,8 +342,6 @@ class HistoryItem(QWidget):
 
 
 class MainWindow(QMainWindow):
-    refresh_signal = pyqtSignal()
-
     def __init__(self, storage_manager):
         super().__init__()
         self.storage_manager = storage_manager
@@ -354,7 +349,10 @@ class MainWindow(QMainWindow):
         self.current_theme = "dark"
         self.init_ui()
         self.set_dark_titlebar()
-        self.setup_timer()
+        if hasattr(self.storage_manager, "entry_saved"):
+            self.storage_manager.entry_saved.connect(self.load_history)
+        if hasattr(self.storage_manager, "history_reset"):
+            self.storage_manager.history_reset.connect(self.load_history)
 
     def init_ui(self):
         # Window setup
@@ -409,14 +407,13 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(scroll_area)
 
         # Load data
-        self.refresh_signal.connect(self.load_history)
         self.load_history()
 
     def set_window_icon(self):
         for icon_ext in ["ico", "png"]:
-            icon_path = resource_path(f"assets/scissor.{icon_ext}")
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
+            icon_path = Path(resource_path(f"assets/scissor.{icon_ext}"))
+            if icon_path.exists():
+                self.setWindowIcon(QIcon(str(icon_path)))
                 if icon_ext == "ico" and sys.platform == "win32":
                     import ctypes
 
@@ -437,16 +434,6 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 print(f"Failed to set dark titlebar: {e}")
-
-    def setup_timer(self):
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.check_for_updates)
-        self.timer.start(2000)
-
-    def check_for_updates(self):
-        current_entries = self.storage_manager.get_all_entries()
-        if len(current_entries) != len(self.entries):
-            self.refresh_signal.emit()
 
     def load_history(self):
         # Clear existing widgets

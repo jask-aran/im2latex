@@ -1,6 +1,7 @@
 """API manager classes handling background Gemini requests for screenshots and chat."""
 from __future__ import annotations
 
+import time
 from typing import List, Dict, Any
 
 from PIL import Image
@@ -24,23 +25,33 @@ class ApiWorker(QObject):
     @pyqtSlot()
     def process(self) -> None:
         """Execute the Gemini request in a background thread."""
-        try:
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash", contents=[self.prompt_text, self.image]
-            )
-            response_text = response.text
+        delay = 0.5
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                response = self.client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=[self.prompt_text, self.image],
+                )
+                response_text = response.text
 
-            if not response_text:
-                raise ValueError("API returned an empty or invalid response")
+                if not response_text:
+                    raise ValueError("API returned an empty or invalid response")
 
-            response_text = response_text.strip()
-            if response_text.startswith("```latex") or response_text.startswith("```"):
-                response_text = response_text.split("\n", 1)[-1].rsplit("\n", 1)[0]
-            response_text = response_text.strip()
+                response_text = response_text.strip()
+                if response_text.startswith("```latex") or response_text.startswith("```"):
+                    response_text = response_text.split("\n", 1)[-1].rsplit("\n", 1)[0]
+                response_text = response_text.strip()
 
-            self.finished.emit(response_text, self.action, self.image)
-        except Exception as exc:  # pragma: no cover - defensive path
-            self.error.emit(str(exc))
+                self.finished.emit(response_text, self.action, self.image)
+                return
+            except Exception as exc:  # pragma: no cover - defensive path
+                last_exc = exc
+                if attempt < 2:
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    self.error.emit(str(exc))
 
 
 class ChatApiWorker(QObject):
@@ -56,42 +67,51 @@ class ChatApiWorker(QObject):
 
     @pyqtSlot()
     def process(self) -> None:
-        try:
-            contents: List[Any] = []
-            for message in self.conversation:
-                role = message.get("role", "user")
-                content_raw = message.get("content")
-                content = content_raw.strip() if isinstance(content_raw, str) else ""
-                image = message.get("image")
-                if not content and image is None:
-                    continue
-                if role == "assistant":
-                    prefix = "Assistant"
-                elif role == "system":
-                    prefix = "System"
+        delay = 0.5
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                contents: List[Any] = []
+                for message in self.conversation:
+                    role = message.get("role", "user")
+                    content_raw = message.get("content")
+                    content = content_raw.strip() if isinstance(content_raw, str) else ""
+                    image = message.get("image")
+                    if not content and image is None:
+                        continue
+                    if role == "assistant":
+                        prefix = "Assistant"
+                    elif role == "system":
+                        prefix = "System"
+                    else:
+                        prefix = "User"
+                    if content:
+                        contents.append(f"{prefix}: {content}")
+                    if isinstance(image, Image.Image):
+                        if not content:
+                            contents.append(f"{prefix}:")
+                        contents.append(image)
+
+                if not contents:
+                    raise ValueError("No content to send to chat API")
+
+                response = self.client.models.generate_content(
+                    model="gemini-2.0-flash", contents=contents
+                )
+
+                response_text = (response.text or "").strip()
+                if not response_text:
+                    raise ValueError("API returned an empty or invalid response")
+
+                self.finished.emit(response_text)
+                return
+            except Exception as exc:  # pragma: no cover - defensive path
+                last_exc = exc
+                if attempt < 2:
+                    time.sleep(delay)
+                    delay *= 2
                 else:
-                    prefix = "User"
-                if content:
-                    contents.append(f"{prefix}: {content}")
-                if isinstance(image, Image.Image):
-                    if not content:
-                        contents.append(f"{prefix}:")
-                    contents.append(image)
-
-            if not contents:
-                raise ValueError("No content to send to chat API")
-
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash", contents=contents
-            )
-
-            response_text = (response.text or "").strip()
-            if not response_text:
-                raise ValueError("API returned an empty or invalid response")
-
-            self.finished.emit(response_text)
-        except Exception as exc:  # pragma: no cover - defensive path
-            self.error.emit(str(exc))
+                    self.error.emit(str(exc))
 
 
 class ApiManager(QObject):
@@ -112,8 +132,10 @@ class ApiManager(QObject):
         self.client = genai.Client(api_key=api_key)
 
     def send_request(self, image: Image.Image, prompt_text: str, action: str) -> bool:
-        self.api_in_progress = True
+        if self.api_in_progress:
+            return False
 
+        self.api_in_progress = True
         self.thread = QThread()
         self.worker = ApiWorker(self.client, prompt_text, action, image)
         self.worker.moveToThread(self.thread)
@@ -122,7 +144,13 @@ class ApiManager(QObject):
         self.worker.error.connect(self._handle_error)
         self.worker.finished.connect(self._cleanup_thread)
         self.worker.error.connect(self._cleanup_thread)
-        self.thread.start()
+        try:
+            self.thread.start()
+        except Exception as exc:  # pragma: no cover - defensive path
+            self.api_in_progress = False
+            self._cleanup_thread()
+            self.api_error.emit(str(exc))
+            return False
         return True
 
     @pyqtSlot(str, str, Image.Image)
@@ -196,7 +224,13 @@ class ChatApiManager(QObject):
         self.worker.error.connect(self._cleanup_thread)
 
         self.chat_in_progress = True
-        self.thread.start()
+        try:
+            self.thread.start()
+        except Exception as exc:  # pragma: no cover - defensive path
+            self.chat_in_progress = False
+            self._cleanup_thread()
+            self.chat_error.emit(str(exc))
+            return False
         return True
 
     @pyqtSlot(str)
