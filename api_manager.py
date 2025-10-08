@@ -57,11 +57,13 @@ class ChatApiWorker(QObject):
     @pyqtSlot()
     def process(self) -> None:
         try:
-            contents: List[str] = []
+            contents: List[Any] = []
             for message in self.conversation:
                 role = message.get("role", "user")
-                content = message.get("content", "").strip()
-                if not content:
+                content_raw = message.get("content")
+                content = content_raw.strip() if isinstance(content_raw, str) else ""
+                image = message.get("image")
+                if not content and image is None:
                     continue
                 if role == "assistant":
                     prefix = "Assistant"
@@ -69,7 +71,12 @@ class ChatApiWorker(QObject):
                     prefix = "System"
                 else:
                     prefix = "User"
-                contents.append(f"{prefix}: {content}")
+                if content:
+                    contents.append(f"{prefix}: {content}")
+                if isinstance(image, Image.Image):
+                    if not content:
+                        contents.append(f"{prefix}:")
+                    contents.append(image)
 
             if not contents:
                 raise ValueError("No content to send to chat API")
